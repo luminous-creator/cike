@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ARCHETYPES } from '@contracts/playbooks'
 import type { AppData, Item, Rating } from '@/types'
 
 const STORAGE_KEY = 'cike.personal.v1'
-const emptyData = (): AppData => ({ version: 2, items: [], checkIns: [] })
+export const DEFAULT_SETTINGS = { capacityMinutesPerDay: 180 }
+export const emptyData = (): AppData => ({ version: 3, items: [], checkIns: [], settings: { ...DEFAULT_SETTINGS } })
 const ratings: Rating[] = ['forgot', 'hard', 'good', 'easy']
 
 function requiredString(value: unknown): string {
@@ -10,10 +12,17 @@ function requiredString(value: unknown): string {
   return value
 }
 
-function parseData(value: unknown): AppData {
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+const positiveInt = (value: unknown, max: number) => typeof value === 'number' && Number.isFinite(value) && value >= 1 ? Math.min(max, Math.round(value)) : undefined
+// 方案与评判是模型产物，只做"形状大致对"的宽松检查，坏了就丢弃，不影响任务本身
+const looseObject = <T>(value: unknown, keys: string[]): T | undefined =>
+  value && typeof value === 'object' && keys.every((key) => key in (value as object)) ? value as T : undefined
+
+export function parseData(value: unknown): AppData {
   if (!value || typeof value !== 'object') throw new Error('备份格式不正确')
-  const parsed = value as { version?: unknown; items?: unknown; checkIns?: unknown }
-  if ((parsed.version !== 1 && parsed.version !== 2) || !Array.isArray(parsed.items) || !Array.isArray(parsed.checkIns)) {
+  const parsed = value as { version?: unknown; items?: unknown; checkIns?: unknown; settings?: { capacityMinutesPerDay?: unknown }; review?: unknown }
+  if ((parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) || !Array.isArray(parsed.items) || !Array.isArray(parsed.checkIns)) {
     throw new Error('备份格式不正确')
   }
   const items: Item[] = parsed.items.map((entry) => {
@@ -31,6 +40,13 @@ function parseData(value: unknown): AppData {
       category: typeof raw.category === 'string' && raw.category.trim() ? raw.category : '未分类',
       why: typeof raw.why === 'string' ? raw.why.slice(0, 800) : undefined,
       type: raw.type as Item['type'],
+      archetype: ARCHETYPES.includes(raw.archetype as never) ? raw.archetype : undefined,
+      timeSlot: typeof raw.timeSlot === 'string' && HHMM.test(raw.timeSlot) ? raw.timeSlot : undefined,
+      sessionMinutes: positiveInt(raw.sessionMinutes, 600),
+      sessionsPerWeek: positiveInt(raw.sessionsPerWeek, 7),
+      deadline: typeof raw.deadline === 'string' && DAY.test(raw.deadline) ? raw.deadline : undefined,
+      plan: looseObject<Item['plan']>(raw.plan, ['method', 'steps', 'archetype']),
+      judgement: looseObject<Item['judgement']>(raw.judgement, ['verdict', 'summary', 'evidence']),
       priority: raw.priority,
       intervalDays: Math.max(1, Math.min(365, Math.round(intervalDays))),
       currentInterval: Math.max(1, Math.min(365, Math.round(currentInterval))),
@@ -56,7 +72,14 @@ function parseData(value: unknown): AppData {
       rating: raw.rating,
     }
   })
-  return { version: 2, items, checkIns }
+  const capacity = positiveInt(parsed.settings?.capacityMinutesPerDay, 960)
+  return {
+    version: 3,
+    items,
+    checkIns,
+    settings: { capacityMinutesPerDay: capacity && capacity >= 15 ? capacity : DEFAULT_SETTINGS.capacityMinutesPerDay },
+    review: looseObject<AppData['review']>(parsed.review, ['judgements', 'balance', 'generatedAt']),
+  }
 }
 
 function loadData(): AppData {
@@ -72,7 +95,7 @@ export function useLocalData() {
   const [data, setData] = useState<AppData>(loadData)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)) } catch { /* 存储已满或被禁用时，内存中的数据仍可用 */ }
   }, [data])
 
   const exportData = useCallback(() => {

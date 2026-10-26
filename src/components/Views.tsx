@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { ArrowRight, Bell, BellOff, Check, Download, HardDrive, Info, Plus, Search, Sparkles, Upload } from 'lucide-react'
+import { ArrowRight, Bell, BellOff, BookMarked, Check, Cpu, Download, HardDrive, Plus, Search, Sparkles, Timer, Upload } from 'lucide-react'
+import { PLAYBOOKS, REFS, ARCHETYPES } from '@contracts/playbooks'
+import type { AiStatus } from '@/lib/harness'
 import { ItemRow } from '@/components/ItemRow'
 import { formatDate, isDue, localDate, recommendedItems } from '@/lib/scheduler'
 import type { AppData, Item } from '@/types'
@@ -9,8 +11,24 @@ interface CommonProps {
   onCheckIn: (item: Item, detailed?: boolean) => void
 }
 
-export function TodayView({ data, onCheckIn, onNew }: CommonProps & { onNew: () => void }) {
-  const queue = recommendedItems(data.items)
+/** 评判相关的行内操作，今日页和清单页共用 */
+export interface JudgeProps {
+  onJudge: (item: Item) => void
+  onApply: (itemId: string) => void
+  onDismiss: (itemId: string) => void
+  judgingId: string | null
+}
+
+/** 当天的复盘里，模型/规则选出的"此刻焦点" */
+function focusIds(data: AppData): Set<string> {
+  const review = data.review
+  if (!review?.synthesis || localDate(new Date(review.generatedAt)) !== localDate()) return new Set()
+  return new Set(review.synthesis.focus.map((f) => f.itemId))
+}
+
+export function TodayView({ data, onCheckIn, onNew, onJudge, onApply, onDismiss, judgingId }: CommonProps & JudgeProps & { onNew: () => void }) {
+  const focus = focusIds(data)
+  const queue = recommendedItems(data.items).sort((a, b) => Number(focus.has(b.id)) - Number(focus.has(a.id)))
   const due = queue.filter(isDue)
   const upcoming = queue.filter((item) => !isDue(item)).slice(0, 3)
   const active = data.items.filter((item) => !item.paused && !item.completedAt).length
@@ -31,7 +49,7 @@ export function TodayView({ data, onCheckIn, onNew }: CommonProps & { onNew: () 
           <span>{due.length} 项待做</span>
         </div>
         <div className="item-list">
-          {due.map((item) => <ItemRow key={item.id} item={item} checkIns={data.checkIns} onCheckIn={onCheckIn} compact />)}
+          {due.map((item) => <ItemRow key={item.id} item={item} checkIns={data.checkIns} onCheckIn={onCheckIn} onJudge={onJudge} onApply={onApply} onDismiss={onDismiss} judging={judgingId === item.id} focus={focus.has(item.id)} compact />)}
           {!due.length && (
             <div className="empty-state">
               <span className="empty-check"><Check size={28} /></span>
@@ -56,14 +74,14 @@ export function TodayView({ data, onCheckIn, onNew }: CommonProps & { onNew: () 
   )
 }
 
-interface ItemsProps extends CommonProps {
+interface ItemsProps extends CommonProps, JudgeProps {
   onNew: () => void
   onEdit: (item: Item) => void
   onTogglePause: (item: Item) => void
   onDelete: (item: Item) => void
 }
 
-export function ItemsView({ data, onCheckIn, onNew, onEdit, onTogglePause, onDelete }: ItemsProps) {
+export function ItemsView({ data, onCheckIn, onNew, onEdit, onTogglePause, onDelete, onJudge, onApply, onDismiss, judgingId }: ItemsProps) {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('全部分类')
   const categories = ['全部分类', ...new Set(data.items.map((item) => item.category))]
@@ -83,7 +101,7 @@ export function ItemsView({ data, onCheckIn, onNew, onEdit, onTogglePause, onDel
         <span>{filtered.length} 个项目</span>
       </div>
       <div className="item-list all-items-list">
-        {filtered.map((item) => <ItemRow key={item.id} item={item} checkIns={data.checkIns} onCheckIn={onCheckIn} onEdit={onEdit} onTogglePause={onTogglePause} onDelete={onDelete} />)}
+        {filtered.map((item) => <ItemRow key={item.id} item={item} checkIns={data.checkIns} onCheckIn={onCheckIn} onEdit={onEdit} onTogglePause={onTogglePause} onDelete={onDelete} onJudge={onJudge} onApply={onApply} onDismiss={onDismiss} judging={judgingId === item.id} />)}
         {!filtered.length && <div className="empty-state"><h3>{data.items.length ? '没有匹配的项目' : '清单还是空的'}</h3><p>{data.items.length ? '换个关键词或分类试试。' : '先记下一件想做的事，一次完成也可以。'}</p><button className="button-primary" onClick={onNew}><Plus size={18} />新建项目</button></div>}
       </div>
     </div>
@@ -127,6 +145,9 @@ export function HistoryView({ data }: { data: AppData }) {
 
 interface SettingsProps {
   notificationState: string
+  capacity: number
+  ai: AiStatus | null
+  onCapacity: (minutes: number) => void
   onToggleNotifications: () => void
   onExport: () => void
   onImport: (file: File) => void
@@ -134,12 +155,20 @@ interface SettingsProps {
   onReset: () => void
 }
 
-export function SettingsView({ notificationState, onToggleNotifications, onExport, onImport, onInstall, onReset }: SettingsProps) {
+export function SettingsView({ notificationState, capacity, ai, onCapacity, onToggleNotifications, onExport, onImport, onInstall, onReset }: SettingsProps) {
   return (
     <div className="view settings-view">
       <header className="view-heading standard-heading"><div><p className="section-code">SETTINGS / 偏好与数据</p><h1>让工具适应你</h1></div></header>
       <section className="settings-section">
-        <div className="settings-copy"><Bell size={21} /><div><h2>到点提醒</h2><p>应用运行时显示浏览器通知；重新打开时补看遗漏项目。</p></div></div>
+        <div className="settings-copy"><Timer size={21} /><div><h2>每天能拿出多少时间</h2><p>规划时用它控制总量：新任务加进来后，每周计划不会超过这个上限；复盘也据此判断哪件事投入多了、哪件少了。</p></div></div>
+        <label className="capacity-field"><input type="number" min={15} max={960} step={15} value={capacity} onChange={(e) => onCapacity(Number(e.target.value))} aria-label="每天可支配分钟" /><span>分钟 / 天</span></label>
+      </section>
+      <section className="settings-section">
+        <div className="settings-copy"><Cpu size={21} /><div><h2>模型接入</h2><p>{ai?.configured ? `已接入 ${ai.label}${ai.model ? `（${ai.model}）` : ''}。规划与复盘由模型执行，每条输出都要过规则评审。` : '未接入模型时，规划与复盘按策略库规则运行，仍然可用。接入方法：在项目根目录 .env 填写 DEEPSEEK_API_KEY 后重启。'}</p></div></div>
+        <span className={`model-badge ${ai?.configured ? 'on' : ''}`}><i />{ai ? (ai.configured ? '已接入' : ai.online ? '规则模式' : '离线') : '检测中'}</span>
+      </section>
+      <section className="settings-section">
+        <div className="settings-copy"><Bell size={21} /><div><h2>到点提醒</h2><p>应用开着时，到了固定时段会弹通知；重新打开时补看遗漏项目。</p></div></div>
         <button className="button-secondary" onClick={onToggleNotifications}>{notificationState === 'granted' ? <BellOff size={17} /> : <Bell size={17} />}{notificationState === 'granted' ? '通知已开启' : '开启浏览器通知'}</button>
       </section>
       <section className="settings-section">
@@ -150,9 +179,27 @@ export function SettingsView({ notificationState, onToggleNotifications, onExpor
         <div className="settings-copy"><HardDrive size={21} /><div><h2>本地数据与备份</h2><p>数据只保存在当前浏览器。清除浏览器数据前，请先导出备份。</p></div></div>
         <div className="backup-actions"><button className="button-secondary" onClick={onExport}><Download size={17} />导出备份</button><label className="button-secondary file-button"><Upload size={17} />导入备份<input type="file" accept="application/json,.json" onChange={(e) => { const file = e.target.files?.[0]; if (file) onImport(file); e.target.value = '' }} /></label></div>
       </section>
-      <section className="learning-note"><Sparkles size={20} /><div><h2>AI 分析与隐私</h2><p>只有点击“分析这件事”时，当前表单中的任务名称、动机、分类和类型才会由服务端发送给模型。AI 只提供三条建议，不会替你打卡或修改间隔；调用可能消耗站点所有者的模型额度，失败也不影响本地使用。</p></div></section>
-      <section className="learning-note"><Info size={20} /><div><h2>复习规则为什么不是固定表格？</h2><p>间隔学习让记忆在“快要想不起来”时得到加强；主动回忆则让每次复习成为一次真实提取。这里从短间隔开始，再按你每次的掌握反馈动态调整，而不是机械增加复习次数。</p></div></section>
+      <section className="learning-note"><Sparkles size={20} /><div><h2>AI 与隐私</h2><p>只有点击“开始规划”或“开始复盘”时，任务名称、分类、时段和打卡记录（含备注）才会由服务端发给模型；不会保存在服务端。模型只提议，采用与否由你决定。</p></div></section>
+      <MethodsSection />
       <button className="text-danger" onClick={onReset}>清除全部本地数据</button>
     </div>
+  )
+}
+
+function MethodsSection() {
+  return (
+    <section className="methods">
+      <div className="section-heading"><div><BookMarked size={15} /><h2>这些建议从哪来</h2></div><span>6 类任务 · {Object.keys(REFS).length} 篇依据</span></div>
+      <div className="methods-grid">
+        {ARCHETYPES.map((id) => {
+          const book = PLAYBOOKS[id]
+          return <article key={id}>
+            <h3>{book.label}<small>{book.examples}</small></h3>
+            <p className="methods-method">{book.method}</p>
+            <ul>{book.principles.map((p) => <li key={p.text}>{p.text}<a href={REFS[p.ref].url} target="_blank" rel="noreferrer">{REFS[p.ref].short}</a></li>)}</ul>
+          </article>
+        })}
+      </div>
+    </section>
   )
 }

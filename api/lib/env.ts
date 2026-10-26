@@ -2,8 +2,9 @@ import "dotenv/config";
 
 function required(name: string): string {
   const value = process.env[name];
+  // 本应用不使用数据库与鉴权；Kimi 平台会注入这些变量，自部署时缺失也照常启动
   if (!value && process.env.NODE_ENV === "production") {
-    throw new Error(`Missing required environment variable: ${name}`);
+    console.warn(`[env] ${name} 未设置（本应用未使用，可忽略）`);
   }
   return value ?? "";
 }

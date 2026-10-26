@@ -1,103 +1,85 @@
-import { useEffect, useRef, useState } from 'react'
-import { LoaderCircle, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { intervalFromSessions } from '@contracts/playbooks'
 import { localDate } from '@/lib/scheduler'
-import type { Item, TaskAnalysis } from '@/types'
+import type { Item } from '@/types'
 
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   item?: Item | null
+  /** 新建时的预填（来自规划方案的"调整后加入"） */
+  draft?: Partial<Item> | null
   onSave: (item: Item) => void
 }
 
 const typeLabels = { once: '一次完成', routine: '周期行动', learning: '学习复习' }
 
-export function ItemDialog({ open, onOpenChange, item, onSave }: Props) {
+export function ItemDialog({ open, onOpenChange, item, draft, onSave }: Props) {
+  const source = item ?? draft ?? null
   const [name, setName] = useState('')
   const [category, setCategory] = useState('')
   const [why, setWhy] = useState('')
   const [type, setType] = useState<Item['type']>('once')
   const [priority, setPriority] = useState<Item['priority']>(2)
   const [intervalDays, setIntervalDays] = useState(3)
+  const [sessionsPerWeek, setSessionsPerWeek] = useState('')
+  const [sessionMinutes, setSessionMinutes] = useState('')
+  const [timeSlot, setTimeSlot] = useState('')
+  const [deadline, setDeadline] = useState('')
   const [dueDate, setDueDate] = useState(localDate())
-  const [analysis, setAnalysis] = useState<TaskAnalysis | undefined>()
-  const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState('')
-  const analysisRequest = useRef(0)
 
   useEffect(() => {
-    analysisRequest.current += 1
     if (!open) return
-    setName(item?.name ?? '')
-    setCategory(item?.category ?? '')
-    setWhy(item?.why ?? '')
-    setType(item?.type ?? 'once')
-    setPriority(item?.priority ?? 2)
-    setIntervalDays(item?.type === 'learning' ? item.currentInterval : item?.intervalDays ?? 3)
-    setDueDate(item?.dueDate ?? localDate())
-    setAnalysis(item?.analysis)
-    setAnalyzing(false)
+    setName(source?.name ?? '')
+    setCategory(source?.category ?? '')
+    setWhy(source?.why ?? '')
+    setType(source?.type ?? 'once')
+    setPriority(source?.priority ?? 2)
+    setIntervalDays(source?.type === 'learning' ? source.currentInterval ?? 1 : source?.intervalDays ?? 3)
+    setSessionsPerWeek(source?.sessionsPerWeek ? String(source.sessionsPerWeek) : '')
+    setSessionMinutes(source?.sessionMinutes ? String(source.sessionMinutes) : '')
+    setTimeSlot(source?.timeSlot ?? '')
+    setDeadline(source?.deadline ?? '')
+    setDueDate(source?.dueDate ?? localDate())
     setError('')
-  }, [open, item])
+  }, [open, source])
 
   function chooseType(next: Item['type']) {
     setType(next)
     setIntervalDays(next === 'learning' ? 1 : 3)
-    setAnalysis(undefined)
-    setError('')
-  }
-
-  async function analyze() {
-    if (!name.trim()) {
-      setError('先写下你想做什么，再进行 AI 分析')
-      return
-    }
-    setAnalyzing(true)
-    setError('')
-    const requestId = ++analysisRequest.current
-    try {
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), category: category.trim() || '未分类', why: why.trim(), type, intervalDays: Math.max(1, intervalDays) }),
-        signal: AbortSignal.timeout(50_000),
-      })
-      const result = await response.json().catch(() => ({})) as { analysis?: Omit<TaskAnalysis, 'generatedAt'>; error?: string }
-      if (requestId !== analysisRequest.current) return
-      if (!response.ok || !result.analysis) throw new Error(result.error || '分析暂时失败，请稍后手动重试')
-      const { definition, nextAction, cadence } = result.analysis
-      setAnalysis({ definition, nextAction, cadence, generatedAt: new Date().toISOString() })
-    } catch (cause) {
-      if (requestId === analysisRequest.current) setError(cause instanceof Error ? cause.message : '分析暂时失败，请稍后手动重试')
-    } finally {
-      if (requestId === analysisRequest.current) setAnalyzing(false)
-    }
+    if (next !== 'routine') setSessionsPerWeek('')
   }
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (!name.trim()) {
-      setError('给这件事起一个名字吧')
-      return
-    }
-    const now = new Date().toISOString()
+    if (!name.trim()) { setError('给这件事起一个名字吧'); return }
+    const perWeek = type === 'routine' && sessionsPerWeek ? Math.min(7, Math.max(1, Number(sessionsPerWeek))) : undefined
+    const interval = perWeek ? intervalFromSessions(perWeek) : Math.max(1, intervalDays)
     onSave({
       id: item?.id ?? crypto.randomUUID(),
       name: name.trim(),
       category: category.trim() || '未分类',
       why: why.trim() || undefined,
       type,
+      archetype: source?.archetype,
       priority,
-      intervalDays: Math.max(1, intervalDays),
-      currentInterval: type === 'learning' ? Math.max(1, intervalDays) : item?.currentInterval ?? Math.max(1, intervalDays),
+      intervalDays: interval,
+      currentInterval: type === 'learning' ? Math.max(1, intervalDays) : item?.currentInterval ?? interval,
       dueDate,
-      createdAt: item?.createdAt ?? now,
+      createdAt: item?.createdAt ?? new Date().toISOString(),
       lastDoneAt: item?.lastDoneAt,
       completedAt: type === 'once' ? item?.completedAt : undefined,
       paused: item?.paused ?? false,
       overdueDecision: item?.overdueDecision,
-      analysis,
+      timeSlot: timeSlot || undefined,
+      sessionMinutes: sessionMinutes ? Math.max(1, Number(sessionMinutes)) : undefined,
+      sessionsPerWeek: perWeek,
+      deadline: deadline || undefined,
+      plan: source?.plan,
+      judgement: item?.judgement,
+      analysis: item?.analysis,
     })
     onOpenChange(false)
   }
@@ -106,53 +88,59 @@ export function ItemDialog({ open, onOpenChange, item, onSave }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="app-dialog">
         <DialogHeader>
-          <p className="section-code">{item ? 'EDIT / 调整任务' : 'NEW / 记下一件事'}</p>
-          <DialogTitle className="dialog-title">{item ? '调整这件事' : '现在想做什么？'}</DialogTitle>
-          <DialogDescription>项目、学业或一个突发想法都可以。日期只是行动建议，不是截止日期。</DialogDescription>
+          <p className="section-code">{item ? 'EDIT / 调整任务' : 'MANUAL / 手动记下'}</p>
+          <DialogTitle className="dialog-title">{item ? '调整这件事' : '手动填写'}</DialogTitle>
+          <DialogDescription>日期只是行动建议，不是截止日期。固定时段会用于提醒和避开冲突。</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="form-stack">
           <label className="field-label">任务名称
-            <input autoFocus value={name} onChange={(e) => { setName(e.target.value); setAnalysis(undefined) }} placeholder="例如：整理作品集的登陆页" maxLength={60} />
+            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：整理作品集的登陆页" maxLength={60} />
           </label>
-          <label className="field-label">为什么想做？（可选，帮助 AI 理解你）
-            <textarea value={why} onChange={(e) => { setWhy(e.target.value); setAnalysis(undefined) }} placeholder="例如：想让第一次访问的人更快看懂我做了什么" rows={3} maxLength={800} />
+          <label className="field-label">为什么想做？（可选）
+            <textarea value={why} onChange={(e) => setWhy(e.target.value)} placeholder="例如：想让第一次访问的人更快看懂我做了什么" rows={2} maxLength={800} />
           </label>
-          <label className="field-label">分类（可自己创建）
-            <input value={category} onChange={(e) => { setCategory(e.target.value); setAnalysis(undefined) }} placeholder="例如：个人项目 / 学业 / 灵感" maxLength={30} />
-          </label>
+          <div className="form-grid">
+            <label className="field-label">分类
+              <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="个人项目 / 学业" maxLength={30} />
+            </label>
+            <label className="field-label">优先级
+              <select value={priority} onChange={(e) => setPriority(Number(e.target.value) as Item['priority'])}>
+                <option value={1}>高</option><option value={2}>中</option><option value={3}>低</option>
+              </select>
+            </label>
+          </div>
           <fieldset className="field-label">怎样完成这件事？
             <div className="segmented three-options">
               {(Object.keys(typeLabels) as Item['type'][]).map((entry) => <button key={entry} type="button" className={type === entry ? 'selected' : ''} onClick={() => chooseType(entry)}>{typeLabels[entry]}</button>)}
             </div>
           </fieldset>
           <div className="form-grid">
-            <label className="field-label">优先级
-              <select value={priority} onChange={(e) => setPriority(Number(e.target.value) as Item['priority'])}>
-                <option value={1}>高</option><option value={2}>中</option><option value={3}>低</option>
-              </select>
+            {type === 'routine' && <label className="field-label">每周几次
+              <input type="number" min={1} max={7} value={sessionsPerWeek} onChange={(e) => setSessionsPerWeek(e.target.value)} placeholder={`或每 ${intervalDays} 天`} />
+            </label>}
+            {type === 'routine' && !sessionsPerWeek && <label className="field-label">每隔几天
+              <input type="number" min={1} max={365} value={intervalDays} onChange={(e) => setIntervalDays(Number(e.target.value))} required />
+            </label>}
+            {type === 'learning' && <label className="field-label">首次复习间隔（天）
+              <input type="number" min={1} max={365} value={intervalDays} onChange={(e) => setIntervalDays(Number(e.target.value))} required />
+            </label>}
+            <label className="field-label">每次多少分钟
+              <input type="number" min={1} max={600} value={sessionMinutes} onChange={(e) => setSessionMinutes(e.target.value)} placeholder="可不填" />
             </label>
-            {type !== 'once' && <label className="field-label">{type === 'learning' ? '首次复习间隔（天）' : '每隔几天做一次'}
-              <input type="number" min={1} max={365} value={intervalDays} onChange={(e) => { setIntervalDays(Number(e.target.value)); setAnalysis(undefined) }} required />
+            <label className="field-label">固定开始时间
+              <input type="time" value={timeSlot} onChange={(e) => setTimeSlot(e.target.value)} />
+            </label>
+          </div>
+          <div className="form-grid">
+            <label className="field-label">{type === 'once' ? '建议行动日期' : '首次 / 下次建议日期'}
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+            </label>
+            {type !== 'once' && <label className="field-label">考试 / 截止日（可选）
+              <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} min={localDate()} />
             </label>}
           </div>
-          <label className="field-label">{type === 'once' ? '建议行动日期' : '首次 / 下次建议日期'}
-            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
-          </label>
           {type === 'once' && <p className="form-hint">打卡一次后就完成归档，不再进入行动队列；记录仍会保留。</p>}
-          {type === 'learning' && <p className="form-hint">打卡时选择掌握程度，系统会自动缩短或拉长后续间隔。</p>}
-
-          <section className="ai-assist" aria-labelledby="ai-assist-title">
-            <div className="ai-assist-heading"><div><Sparkles size={17} /><h3 id="ai-assist-title">AI 任务分析</h3></div><span>可选</span></div>
-            <p>只发送此处的任务文字，返回固定的三条简短建议；不会替你修改任务。</p>
-            <button type="button" className="button-secondary analyze-button" onClick={analyze} disabled={analyzing}>
-              {analyzing ? <LoaderCircle className="spin" size={17} /> : <Sparkles size={17} />}{analyzing ? '正在整理…' : analysis ? '重新分析' : '分析这件事'}
-            </button>
-            {analysis && <dl className="analysis-preview">
-              <div><dt>任务定义</dt><dd>{analysis.definition}</dd></div>
-              <div><dt>建议下一步</dt><dd>{analysis.nextAction}</dd></div>
-              <div><dt>节奏建议</dt><dd>{analysis.cadence}</dd></div>
-            </dl>}
-          </section>
+          {type === 'learning' && <p className="form-hint">打卡时选择回忆结果，间隔会自动拉长或缩短；有考试日期时，越临近复习越密。</p>}
           {error && <p role="alert" className="form-error">{error}</p>}
           <div className="dialog-actions">
             <button type="button" className="button-secondary" onClick={() => onOpenChange(false)}>取消</button>

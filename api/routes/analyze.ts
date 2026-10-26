@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { generateObject } from "ai";
 import { taskAnalysisInputSchema, taskAnalysisSchema } from "@contracts/ai";
-import { classifyAiError, listModels, AiInvalidRequest, AiMisconfigured, AiTransient, AiUnavailable, ContentRejected } from "../ai-client";
-import { kimiGw } from "../ai/provider";
+import { classifyAiError, AiInvalidRequest, AiMisconfigured, AiTransient, AiUnavailable, ContentRejected } from "../ai-client";
+import { requireAi, resolveAi } from "../ai/provider";
 import { log } from "../lib/logger";
 
 export const analyzeRoutes = new Hono();
@@ -20,10 +20,11 @@ analyzeRoutes.post("/", async (c) => {
   if (!parsed.success) return c.json({ error: "请先填写任务名称，并检查输入内容。" }, 400);
 
   try {
-    const { defaultModelId } = await listModels();
+    const ai = requireAi(await resolveAi());
     const input = parsed.data;
     const { object } = await generateObject({
-      model: kimiGw(defaultModelId),
+      model: ai.model,
+      providerOptions: ai.options("none"),
       schema: taskAnalysisSchema,
       system: SYSTEM_PROMPT,
       prompt: `请分析以下任务：\n${JSON.stringify(input)}`,

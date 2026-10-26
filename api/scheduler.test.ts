@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { completeItem, isDue, isOverdue, localDate, recommendedItems } from '../src/lib/scheduler'
+import { addDays, completeItem, isDue, isOverdue, learningInterval, localDate, recommendedItems } from '../src/lib/scheduler'
 import type { Item } from '@/types'
 
 const today = localDate()
@@ -31,5 +31,16 @@ describe('灵活任务调度', () => {
     const sooner = item({ name: '明天', dueDate: '2099-01-02', priority: 3 })
     const done = item({ completedAt: new Date().toISOString() })
     expect(recommendedItems([later, done, sooner]).map((entry) => entry.name)).toEqual(['明天', '后天'])
+  })
+
+  it('学习复习按实际间隔计：拖了 10 天仍记得，下次至少 20 天', () => {
+    const learned = item({ type: 'learning', currentInterval: 3, lastDoneAt: new Date(`${addDays(today, -10)}T09:00:00`).toISOString() })
+    expect(learningInterval(learned, 'good', today)).toBe(20)
+    expect(learningInterval(learned, 'forgot', today)).toBe(1)
+  })
+
+  it('有考试日期时，复习间隔受时间山脊上限约束', () => {
+    const learned = item({ type: 'learning', currentInterval: 8, deadline: addDays(today, 10), lastDoneAt: new Date(`${addDays(today, -8)}T09:00:00`).toISOString() })
+    expect(learningInterval(learned, 'easy', today)).toBe(2)
   })
 })

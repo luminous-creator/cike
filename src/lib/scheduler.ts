@@ -1,3 +1,4 @@
+import { ridgelineCap } from '@contracts/playbooks'
 import type { CheckIn, Item, Rating } from '@/types'
 
 export const DAY_MS = 86_400_000
@@ -39,13 +40,29 @@ export function nextInterval(current: number, rating: Rating): number {
   return Math.max(current + 2, Math.round(current * 3))
 }
 
+/**
+ * 学习类的下一次间隔：
+ * - 记得 / 轻松时按"实际隔了多久"计，拖了 10 天还记得，说明记忆比计划更稳；
+ * - 有考试日期时，按 Cepeda 2008 的时间山脊收紧上限，越临近越密。
+ */
+export function learningInterval(item: Item, rating: Rating, today: string): number {
+  const elapsed = item.lastDoneAt ? daysBetween(localDate(new Date(item.lastDoneAt)), today) : item.currentInterval
+  const base = rating === 'good' || rating === 'easy' ? Math.max(item.currentInterval, elapsed) : item.currentInterval
+  let next = Math.min(365, nextInterval(base, rating))
+  if (item.deadline) {
+    const left = daysBetween(today, item.deadline)
+    if (left > 0) next = Math.min(next, ridgelineCap(left))
+  }
+  return Math.max(1, next)
+}
+
 export function completeItem(item: Item, rating?: Rating, at = new Date()): Item {
   if (item.type === 'once') {
     return { ...item, lastDoneAt: at.toISOString(), completedAt: at.toISOString(), overdueDecision: undefined }
   }
   const today = localDate(at)
   const interval = item.type === 'learning' && rating
-    ? nextInterval(item.currentInterval, rating)
+    ? learningInterval(item, rating, today)
     : item.intervalDays
   return {
     ...item,
