@@ -66,7 +66,7 @@ export function ReviewView({ data, ai, onSave, onApply, onDismiss, onCheckIn }: 
         </div>
       </section>
 
-      <HarnessTrace events={events} running={running} title="复盘过程" />
+      <HarnessTrace key={running ? 'live' : 'done'} events={events} running={running} title="复盘过程" defaultOpen={running} />
 
       {!review && !running && <div className="empty-state review-empty">
         <span className="empty-check"><ScanSearch size={26} /></span>
@@ -144,7 +144,7 @@ function BalanceChart({ rows, note }: { rows: BalanceRow[]; note?: string }) {
         {rows.map((row) => <li key={row.itemId} className={row.state}>
           <span className="balance-name">{row.name}</span>
           <span className="balance-bar" aria-label={`${row.name} 实际 ${row.actualMinutes} 分钟，预算 ${row.targetMinutes} 分钟`}>
-            <i style={{ width: `${(row.actualMinutes / max) * 100}%` }} />
+            <i style={{ transform: `scaleX(${row.actualMinutes / max})` }} />
             <b style={{ left: `${(row.targetMinutes / max) * 100}%` }} />
           </span>
           <span className="balance-num">{row.actualMinutes}<small>/{row.targetMinutes}</small></span>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, BookMarked, Check, CircleAlert, LoaderCircle, PencilLine, RotateCcw, Sparkles, X } from 'lucide-react'
+import { BookMarked, Check, CircleAlert, LoaderCircle, PencilLine, RotateCcw, Sparkles, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { HarnessTrace } from '@/components/HarnessTrace'
 import type { HarnessEvent, PlanResult } from '@contracts/harness'
@@ -118,7 +118,7 @@ export function PlannerDialog({ open, onOpenChange, data, ai, onCreate, onManual
           </div>
         </div>}
 
-        <HarnessTrace events={events} running={running} title="规划过程" defaultOpen={phase !== 'result'} />
+        <HarnessTrace key={phase === 'result' ? 'done' : 'live'} events={events} running={running} title="规划过程" defaultOpen={phase !== 'result'} />
 
         {phase === 'result' && result && <>
           <PlanCard result={result} name={name} category={category} onName={setName} onCategory={setCategory} />
@@ -158,11 +158,11 @@ function PlanCard({ result, name, category, onName, onCategory }: { result: Plan
         {derived.itemType === 'learning' && <div><dt>复习</dt><dd>{derived.reviewOffsets.length ? derived.reviewOffsets.slice(0, 4).map((d) => addDays(today, d).slice(5).replace('-', '/').replace(/^0/, '')).join(' · ') : `${plan.firstIntervalDays} 天后`}</dd></div>}
         {derived.itemType === 'once' && <div><dt>哪天</dt><dd>{formatDate(plan.startDate)}</dd></div>}
         <div><dt>每次</dt><dd>{plan.sessionMinutes} 分钟</dd></div>
-        <div><dt>时段</dt><dd>{plan.timeSlot ?? '不固定'}</dd></div>
+        {(plan.timeSlot || book.fixedSlot) && <div><dt>时段</dt><dd>{plan.timeSlot ?? '待定'}</dd></div>}
         {plan.deadline && <div><dt>截止</dt><dd>{formatDate(plan.deadline)}</dd></div>}
       </dl>
 
-      <div className="plan-now"><span>现在就做</span><strong>{plan.firstAction}</strong><ArrowRight size={16} /></div>
+      <div className="plan-now"><span>现在就做</span><strong>{plan.firstAction}</strong></div>
       <p className="plan-ifthen">{plan.ifThen}</p>
 
       <ol className="plan-steps">
