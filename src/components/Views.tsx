@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { ArrowRight, Bell, BellOff, BookMarked, Check, Cpu, Download, HardDrive, Plus, Search, Sparkles, Timer, Upload } from 'lucide-react'
+import { Bell, BellOff, BookMarked, Cpu, Download, HardDrive, Plus, Search, Sparkles, Timer, Upload } from 'lucide-react'
 import { PLAYBOOKS, REFS, ARCHETYPES } from '@contracts/playbooks'
 import type { AiStatus } from '@/lib/harness'
 import { ItemRow } from '@/components/ItemRow'
-import { formatDate, isDue, localDate, recommendedItems } from '@/lib/scheduler'
+import { localDate, recommendedItems } from '@/lib/scheduler'
 import type { AppData, Item } from '@/types'
 
 interface CommonProps {
@@ -19,60 +19,6 @@ export interface JudgeProps {
   judgingId: string | null
 }
 
-/** 当天的复盘里，模型/规则选出的"此刻焦点" */
-function focusIds(data: AppData): Set<string> {
-  const review = data.review
-  if (!review?.synthesis || localDate(new Date(review.generatedAt)) !== localDate()) return new Set()
-  return new Set(review.synthesis.focus.map((f) => f.itemId))
-}
-
-export function TodayView({ data, onCheckIn, onNew, onJudge, onApply, onDismiss, judgingId }: CommonProps & JudgeProps & { onNew: () => void }) {
-  const focus = focusIds(data)
-  const queue = recommendedItems(data.items).sort((a, b) => Number(focus.has(b.id)) - Number(focus.has(a.id)))
-  const due = queue.filter(isDue)
-  const upcoming = queue.filter((item) => !isDue(item)).slice(0, 3)
-  const active = data.items.filter((item) => !item.paused && !item.completedAt).length
-
-  return (
-    <div className="view today-view">
-      <header className="view-heading today-heading">
-        <div>
-          <p className="section-code">TODAY / {new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())}</p>
-          <h1>现在可以<br />做这些。</h1>
-        </div>
-        <p className="heading-note">不必一次做完所有事。<br />选一件，开始就好。</p>
-      </header>
-
-      <section className="queue-section" aria-labelledby="queue-title">
-        <div className="section-heading">
-          <div><span className="live-dot" /><h2 id="queue-title">今日行动队列</h2></div>
-          <span>{due.length} 项待做</span>
-        </div>
-        <div className="item-list">
-          {due.map((item) => <ItemRow key={item.id} item={item} checkIns={data.checkIns} onCheckIn={onCheckIn} onJudge={onJudge} onApply={onApply} onDismiss={onDismiss} judging={judgingId === item.id} focus={focus.has(item.id)} compact />)}
-          {!due.length && (
-            <div className="empty-state">
-              <span className="empty-check"><Check size={28} /></span>
-              <h3>{active ? '今天没有到期项目' : '从一件想坚持的事开始'}</h3>
-              <p>{active ? '可以看下面的近期安排，或提前完成任何项目。' : '记下一次任务、周期行动或学习内容，下一次打开时，不必再从头想起。'}</p>
-              <button className="button-primary" onClick={onNew}><Plus size={18} />{active ? '新建项目' : '创建第一个项目'}</button>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {upcoming.length > 0 && <section className="upcoming-section">
-        <div className="section-heading"><h2>接下来</h2><span>按建议日期排列</span></div>
-        <div className="upcoming-list">
-          {upcoming.map((item) => <button key={item.id} onClick={() => onCheckIn(item, item.type === 'learning')}>
-            <span><strong>{item.name}</strong><small>{item.category} · {{ once: '一次完成', routine: '周期行动', learning: '学习复习' }[item.type]}</small></span>
-            <span>{formatDate(item.dueDate)}<ArrowRight size={17} /></span>
-          </button>)}
-        </div>
-      </section>}
-    </div>
-  )
-}
 
 interface ItemsProps extends CommonProps, JudgeProps {
   onNew: () => void

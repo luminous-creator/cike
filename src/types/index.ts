@@ -1,5 +1,6 @@
 import type { Judgement, Plan, ReviewResult } from '@contracts/harness'
 import type { Archetype } from '@contracts/playbooks'
+import type { TodayBrief } from '@contracts/today'
 
 export type ItemType = 'once' | 'routine' | 'learning'
 export type Rating = 'forgot' | 'hard' | 'good' | 'easy'
@@ -72,6 +73,8 @@ export interface AppData {
   checkIns: CheckIn[]
   settings: Settings
   review?: ReviewResult
+  /** 当天由模型排过的“现在做哪一件”，跨天自动失效 */
+  todayBrief?: TodayBrief
 }
 
 export type View = 'today' | 'items' | 'review' | 'history' | 'settings'

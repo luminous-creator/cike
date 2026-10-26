@@ -60,6 +60,23 @@ ${book.breaks ? `整块学习用预设休息：${book.breaks}。` : ""}
 必须调用 submit_plan 提交。`;
 }
 
+export function todaySystem(today: string, now: string | undefined): string {
+  return `你是「此刻」的今日助手。用户不要计划表，只想知道：现在做哪一件，还可以做哪一两件。
+今天 ${today}${now ? `，现在 ${now}` : ""}。系统已经按规则算出今天能做的候选（含规则排序、理由、分钟数、备注）。
+你的工作：从候选里挑出 now（现在就做的一件）和 also（最多两件备选），写理由和第一步。
+挑选原则：
+- 固定时段已经到了的事优先（Gollwitzer 2006：到点就做）
+- 其次看截止、逾期和本周投入不足；本周已经超出预算的放后面（Leroy 2009：别让一件事挤掉别的）
+- 复习到期的学习不要拖，拖久就要重学（Murre & Dros 2015）
+- 剩余时间放不下的长任务不要排在“现在”
+- 可以参考备注调整第一步，比如上次卡在哪
+格式规则：
+- reason 一句话、带具体数字或时间，不超过 40 字；firstAction 动词开头、10 分钟内能开始，不超过 40 字
+- message 一句话说今天的重点，不超过 40 字，不说教、不加油打气
+- 只能用候选里的 itemId
+必须调用 submit_today 提交，不要输出其它文字。被退回时按原因修改后重新提交。`;
+}
+
 export function reviewSystem(induce: boolean, allowPatterns: boolean): string {
   return `你是「此刻」的复盘评审。系统已根据数据算出本轮议程：需要评判的事项及原因。
 工作步骤：

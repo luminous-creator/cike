@@ -1,6 +1,7 @@
 // 动态 harness 的数据契约：浏览器发来的快照、模型必须提交的结构、流式事件。
 import { z } from 'zod'
 import { ARCHETYPES, REF_KEYS, type Archetype, type RefKey } from './playbooks'
+import type { TodayBrief } from './today'
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
@@ -161,6 +162,12 @@ export const planRequestSchema = z.object({
   snapshot: snapshotSchema,
 })
 
+export const todayRequestSchema = z.object({
+  snapshot: snapshotSchema,
+  skip: z.array(z.string()).max(200).optional(),
+  firstActions: z.record(z.string(), z.string().max(60)).optional(),
+})
+
 export interface AgendaEntry { itemId: string; name: string; reasons: string[]; score: number }
 
 export interface BalanceRow {
@@ -196,5 +203,6 @@ export type HarnessEvent =
   | { type: 'synthesis'; synthesis: Synthesis & { source: 'model' | 'rule' } }
   | { type: 'plan'; result: PlanResult }
   | { type: 'review'; result: ReviewResult }
+  | { type: 'today'; brief: TodayBrief }
   | { type: 'error'; message: string; code?: string }
   | { type: 'done'; durationMs: number; steps: number; model: string | null }

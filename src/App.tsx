@@ -1,17 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarDays, CheckSquare2, Clock3, History, Home, Plus, ScanSearch, Settings } from 'lucide-react'
 import type { ReviewResult } from '@contracts/harness'
 import { ItemDialog } from '@/components/ItemDialog'
 import { CheckInDialog } from '@/components/CheckInDialog'
-import { OverdueDialog } from '@/components/OverdueDialog'
+import { TodayView } from '@/components/TodayView'
 import { PlannerDialog } from '@/components/PlannerDialog'
 import { ReviewView } from '@/components/ReviewView'
-import { HistoryView, ItemsView, SettingsView, TodayView } from '@/components/Views'
+import { HistoryView, ItemsView, SettingsView } from '@/components/Views'
 import { useLocalData } from '@/hooks/useLocalData'
 import { applyProposal } from '@/lib/apply'
-import { buildSnapshot, requestReview, useAiStatus } from '@/lib/harness'
+import { buildSnapshot, firstActionsOf, requestReview, requestToday, useAiStatus } from '@/lib/harness'
+import { allPicks, buildBrief, type TodayBrief } from '@contracts/today'
 import { verdictLabels } from '@/lib/labels'
-import { addDays, completeItem, isDue, isOverdue, localDate } from '@/lib/scheduler'
+import { addDays, completeItem, isDue, localDate } from '@/lib/scheduler'
 import type { CheckIn, Item, View } from '@/types'
 
 interface InstallPrompt extends Event {
@@ -46,7 +47,30 @@ export default function App() {
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 6); cutoff.setHours(0, 0, 0, 0)
     return data.checkIns.filter((entry) => new Date(entry.doneAt) >= cutoff).length
   }, [data.checkIns])
-  const pendingOverdue = data.items.filter((item) => isOverdue(item) && item.overdueDecision !== item.dueDate)
+  // ---- 今天：现在做哪一件（规则即时算；模型排过的当天优先）
+  const [minute, setMinute] = useState(() => Math.floor(Date.now() / 60_000))
+  const [arranging, setArranging] = useState(false)
+  const skipKey = `cike.skip.${localDate()}`
+  const [skipToday, setSkipToday] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(skipKey) ?? '[]') } catch { return [] } })
+  const updateSkip = useCallback((next: string[]) => { setSkipToday(next); try { localStorage.setItem(skipKey, JSON.stringify(next)) } catch { /* 仅本次有效 */ } }, [skipKey])
+  useEffect(() => { const timer = window.setInterval(() => setMinute(Math.floor(Date.now() / 60_000)), 30_000); return () => window.clearInterval(timer) }, [])
+  const todayInput = useMemo(() => ({ snapshot: buildSnapshot(data), skip: skipToday, firstActions: firstActionsOf(data) }),
+    // minute 让固定时段到点时重新排序
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, skipToday, minute])
+  const ruleBrief = useMemo(() => buildBrief(todayInput.snapshot, todayInput), [todayInput])
+  const candidateIds = useMemo(() => new Set(allPicks(todayInput.snapshot, todayInput).map((p) => p.itemId)), [todayInput])
+  const brief: TodayBrief = useMemo(() => {
+    const model = data.todayBrief
+    // 模型排的结果当天有效；它挑的“现在”做完、换掉或不再可做时，回到规则版
+    if (!model || model.date !== localDate() || !model.now || !candidateIds.has(model.now.itemId)) return ruleBrief
+    const also = model.also.filter((a) => candidateIds.has(a.itemId))
+    return { ...model, also, laterToday: ruleBrief.laterToday, tomorrow: ruleBrief.tomorrow }
+  }, [data.todayBrief, ruleBrief, candidateIds])
+  const restItems = useMemo(() => {
+    const shown = new Set([brief.now?.itemId, ...brief.also.map((a) => a.itemId), ...brief.laterToday.map((l) => l.itemId)])
+    return data.items.filter((item) => candidateIds.has(item.id) && !shown.has(item.id))
+  }, [brief, candidateIds, data.items])
 
   useEffect(() => {
     const handler = (event: Event) => { event.preventDefault(); setInstallPrompt(event as InstallPrompt) }
@@ -61,14 +85,15 @@ export default function App() {
   }, [toast])
 
   useEffect(() => {
-    if (notificationState !== 'granted' || dueCount === 0) return
+    if (notificationState !== 'granted' || !brief.now) return
     const key = `cike.notified.${localDate()}`
     try {
       if (localStorage.getItem(key)) return
-      new Notification('此刻 · 今天可以做这些', { body: `有 ${dueCount} 个项目到了建议时间。选一件开始就好。`, tag: 'cike-daily' })
+      const also = brief.also.map((a) => a.name).join('、')
+      new Notification(`此刻 · 先做「${brief.now.name}」`, { body: `${brief.now.minutes} 分钟，第一步：${brief.now.firstAction}${also ? `\n也可以：${also}` : ''}`, tag: 'cike-daily' })
       localStorage.setItem(key, '1')
     } catch { /* 存储不可用时不重复提醒也无妨 */ }
-  }, [dueCount, notificationState])
+  }, [brief.now, brief.also, notificationState])
 
   // 固定时段提醒：到点后一小时内提醒一次（应用开着时有效）
   useEffect(() => {
@@ -171,13 +196,36 @@ export default function App() {
   }
 
   function saveCheckIn(checkIn: CheckIn) {
-    setData((current) => {
-      const item = current.items.find((entry) => entry.id === checkIn.itemId)
-      if (!item) return current
-      return { ...current, checkIns: [...current.checkIns, checkIn], items: current.items.map((entry) => entry.id === item.id ? completeItem(item, checkIn.rating, new Date(checkIn.doneAt)) : entry) }
-    })
+    const item = data.items.find((entry) => entry.id === checkIn.itemId)
+    if (!item) return
+    const next = { ...data, checkIns: [...data.checkIns, checkIn], items: data.items.map((entry) => entry.id === item.id ? completeItem(item, checkIn.rating, new Date(checkIn.doneAt)) : entry) }
+    setData(next)
     setCheckInItem(null)
-    showToast(checkIn.rating ? '已记录，下次复习间隔已调整' : '已完成，记录已经留下')
+    // 做完一件，直接告诉下一件是什么
+    const following = buildBrief(buildSnapshot(next), { skip: skipToday, firstActions: firstActionsOf(next) }).now
+    const done = checkIn.rating ? '已记录，复习间隔已调整' : '做完了'
+    showToast(following ? `${done} · 下一件：${following.name}` : `${done} · 今天的都做完了`)
+  }
+
+  function swapNow(itemId: string) {
+    updateSkip([...skipToday, itemId])
+  }
+
+  function notToday(item: Item) {
+    setData((current) => ({ ...current, items: current.items.map((entry) => entry.id === item.id ? { ...entry, dueDate: addDays(localDate(), 1), overdueDecision: undefined } : entry) }))
+    showToast(`「${item.name}」挪到明天`)
+  }
+
+  async function arrangeToday() {
+    setArranging(true)
+    try {
+      const { brief: arranged, error } = await requestToday(todayInput)
+      setData((current) => ({ ...current, todayBrief: arranged }))
+      if (error) showToast(error)
+      else if (arranged.source !== 'model') showToast('可选的事不多，按规则排就够了')
+    } finally {
+      setArranging(false)
+    }
   }
 
   function togglePause(item: Item) {
@@ -189,11 +237,6 @@ export default function App() {
     if (!window.confirm(`确定删除“${item.name}”及其打卡记录吗？`)) return
     setData((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id), checkIns: current.checkIns.filter((entry) => entry.itemId !== item.id) }))
     showToast('项目已删除')
-  }
-
-  function resolveOverdue(item: Item, postpone: boolean) {
-    setData((current) => ({ ...current, items: current.items.map((entry) => entry.id === item.id ? { ...item, dueDate: postpone ? addDays(localDate(), 1) : item.dueDate, overdueDecision: postpone ? undefined : item.dueDate } : entry) }))
-    showToast(postpone ? '已顺延到明天' : '已保留在行动队列')
   }
 
   async function toggleNotifications() {
@@ -248,7 +291,7 @@ export default function App() {
       <header className="mobile-header"><div className="mobile-brand"><span>＋＋</span><strong>此刻</strong></div><button className="icon-button" onClick={openNew} aria-label="新建项目"><Plus size={21} /></button></header>
 
       <main className="main-content">
-        {view === 'today' && <TodayView data={data} onCheckIn={requestCheckIn} onNew={openNew} {...judgeProps} />}
+        {view === 'today' && <TodayView data={data} brief={brief} restItems={restItems} ai={ai} arranging={arranging} skippedCount={skipToday.length} onArrange={() => void arrangeToday()} onDone={(item) => requestCheckIn(item, item.type === 'learning')} onCheckIn={requestCheckIn} onSwap={swapNow} onNotToday={notToday} onResetSkip={() => updateSkip([])} onNew={openNew} {...judgeProps} />}
         {view === 'items' && <ItemsView data={data} onCheckIn={requestCheckIn} onNew={openNew} onEdit={(item) => { setDraft(null); setEditingItem(item); setItemDialog(true) }} onTogglePause={togglePause} onDelete={deleteItem} {...judgeProps} />}
         {view === 'review' && <ReviewView data={data} ai={ai} onSave={saveReview} onApply={applyJudgement} onDismiss={dismissJudgement} onCheckIn={requestCheckIn} />}
         {view === 'history' && <HistoryView data={data} />}
@@ -260,7 +303,6 @@ export default function App() {
       <PlannerDialog open={plannerOpen} onOpenChange={setPlannerOpen} data={data} ai={ai} onCreate={createFromPlan} onManual={openManual} />
       <ItemDialog open={itemDialog} onOpenChange={setItemDialog} item={editingItem} draft={draft} onSave={saveItem} />
       <CheckInDialog item={checkInItem} onOpenChange={(open) => { if (!open) setCheckInItem(null) }} onSave={saveCheckIn} />
-      <OverdueDialog items={pendingOverdue} onKeep={(item) => resolveOverdue(item, false)} onPostpone={(item) => resolveOverdue(item, true)} />
       {toast && <div className="toast" role="status"><Clock3 size={17} />{toast}</div>}
       <div className="date-watermark" aria-hidden="true"><CalendarDays size={14} />{localDate().replaceAll('-', ' / ')}</div>
     </div>

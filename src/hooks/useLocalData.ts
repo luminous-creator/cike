@@ -79,6 +79,7 @@ export function parseData(value: unknown): AppData {
     checkIns,
     settings: { capacityMinutesPerDay: capacity && capacity >= 15 ? capacity : DEFAULT_SETTINGS.capacityMinutesPerDay },
     review: looseObject<AppData['review']>(parsed.review, ['judgements', 'balance', 'generatedAt']),
+    todayBrief: looseObject<AppData['todayBrief']>((parsed as { todayBrief?: unknown }).todayBrief, ['date', 'now', 'also', 'laterToday', 'tomorrow']),
   }
 }
 

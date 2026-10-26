@@ -1,6 +1,16 @@
 # 此刻（Cike）v0.3
 
-一个本地优先的个人行动工作台。v0.3 的重点：**说一句「我想做什么」，它会判断这是哪类事、按研究证据给出做法，并且每条建议都要过规则检查。**
+一个本地优先的个人行动工作台。v0.3 的重点：**打开就告诉你现在做哪一件。** 说一句「我想做什么」，它会判断这是哪类事、按研究证据给出做法，并且每条建议都要过规则检查。
+
+## 今天页
+
+不是计划表，只回答一件事：现在做什么。
+
+- 顶部一张卡：现在做的这件、为什么是它、第一步。三个按钮：**做完了 / 换一件 / 今天不做**。
+- 下面最多两件「也可以」，固定时段还没到的放「今天还有」（到点提醒），再往下是「明天」。
+- 做完一件会直接提示下一件；晨间通知只点名第一件。
+- 「让 AI 排一下」：规则先算出候选，模型只在候选里挑顺序、写理由和第一步，被校验器检查后才显示，当天有效。
+- 去掉了 v0.2 打开就弹出的逾期确认框。
 
 ## 快速开始（Windows）
 
@@ -12,7 +22,7 @@
 ```bash
 npm install
 npm run dev        # 开发：http://localhost:3000
-npm test           # 19 个测试
+npm test           # 23 个测试
 npm run build      # 生产构建
 npm start          # 运行 dist/boot.js（PORT 可改端口）
 ```
@@ -61,7 +71,8 @@ npm start          # 运行 dist/boot.js（PORT 可改端口）
 - `contracts/fallback.ts`：纯规则版 harness（离线、未接模型时浏览器和服务端共用）
 - `api/harness/engine.ts`：模型工具循环（提交即校验、退回修正、动态收束）
 - `api/harness/prompts.ts`：路由器、专家、复盘评审的提示词
-- `api/routes/harness.ts`：`POST /api/plan`、`POST /api/review`（NDJSON 流）、`GET /api/ai/status`
+- `contracts/today.ts`：今天页的规则排序（固定时段、逾期、截止、投入不足、复习到期）与模型输出校验
+- `api/routes/harness.ts`：`POST /api/plan`、`POST /api/review`、`POST /api/today`（NDJSON 流）、`GET /api/ai/status`
 - `src/components/PlannerDialog.tsx`、`ReviewView.tsx`、`HarnessTrace.tsx`：前端
 
 ## 数据

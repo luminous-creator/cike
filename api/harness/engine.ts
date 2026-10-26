@@ -16,7 +16,8 @@ import {
 } from "@contracts/signals";
 import { classifyAiError, AiInvalidRequest, AiMisconfigured, AiTransient, AiUnavailable, ContentRejected } from "../ai-client";
 import type { AiBackend, Effort } from "../ai/provider";
-import { routerSystem, reviewSystem, specialistSystem } from "./prompts";
+import { allPicks, buildBrief, mergeToday, todaySchema, verifyToday, type TodayModelOutput } from "@contracts/today";
+import { routerSystem, reviewSystem, specialistSystem, todaySystem } from "./prompts";
 
 export type Emit = (event: HarnessEvent) => void;
 
@@ -216,6 +217,51 @@ function compact(s: ItemSignals) {
     adherence14: s.adherence14, minutes7: s.minutes7, interval: s.type === "learning" ? s.currentInterval : s.intervalDays,
     sessionMinutes: s.sessionMinutes, sessionsPerWeek: s.sessionsPerWeek, timeSlot: s.timeSlot ?? null, forgetRate: s.forgetRate,
   };
+}
+
+// ---------------------------------------------------------------- 今天：现在做哪一件
+
+export async function runToday(
+  input: { snapshot: Snapshot; skip?: string[]; firstActions?: Record<string, string> },
+  ai: AiBackend | null,
+  emit: Emit,
+  signal?: AbortSignal,
+): Promise<RunStats> {
+  const stats: RunStats = { steps: 0, tokens: 0, rejected: 0 };
+  const { snapshot } = input;
+  const brief = buildBrief(snapshot, input);
+  const picks = allPicks(snapshot, input);
+  emit({ type: "stage", stage: "rules", label: "规则排序", detail: `今天可做 ${picks.length} 件，固定时段未到 ${brief.laterToday.length} 件` });
+  // 候选不足两件时没有可排的，直接用规则结果，不调模型
+  if (!ai || picks.length < 2) {
+    emit({ type: "today", brief });
+    return stats;
+  }
+  const signals = computeSignals(snapshot);
+  const candidates = picks.map((p) => {
+    const s = signals.get(p.itemId)!;
+    return { itemId: p.itemId, name: p.name, minutes: p.minutes, timeSlot: p.timeSlot ?? null, ruleReasons: p.reasons, firstAction: p.firstAction, type: s.type, notes: s.notes };
+  });
+  emit({ type: "stage", stage: "agent", label: "模型重排", detail: `${ai.label} 从 ${picks.length} 件里挑` });
+  try {
+    const { value } = await submitLoop<TodayModelOutput>({
+      ai, effort: "none", system: todaySystem(snapshot.today, snapshot.now),
+      prompt: `候选（按规则分数从高到低）：\n${JSON.stringify(candidates)}\n固定时段未到（不能排进现在）：${JSON.stringify(brief.laterToday)}`,
+      name: "submit_today", description: "提交今天现在做哪一件、还可以做什么", schema: todaySchema,
+      verify: (out) => verifyToday(out, brief, picks.map((p) => p.itemId)), target: "今日安排",
+      maxSteps: 3, maxRejections: 2, emit, stats, signal,
+    });
+    if (value) {
+      emit({ type: "accepted", target: "今日安排", label: "通过校验" });
+      emit({ type: "today", brief: mergeToday(brief, value, new Map(picks.map((p) => [p.itemId, p]))) });
+      return stats;
+    }
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    emit({ type: "error", ...friendly(error) });
+  }
+  emit({ type: "today", brief });
+  return stats;
 }
 
 export async function runReview(

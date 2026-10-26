@@ -4,7 +4,8 @@ import type { HarnessEvent, Snapshot } from "@contracts/harness";
 import { checkPlan, autoFixPlan, rulePlan, ruleRoute } from "@contracts/planner";
 import { computeBalance, computeSignals, planReview, ruleJudgement } from "@contracts/signals";
 import { keywordRoute, reviewPreview, ridgelineCap } from "@contracts/playbooks";
-import { runPlan, runReview } from "./harness/engine";
+import { runPlan, runReview, runToday } from "./harness/engine";
+import { buildBrief } from "@contracts/today";
 import type { AiBackend } from "./ai/provider";
 
 const today = "2026-10-26";
@@ -152,6 +153,37 @@ describe("规划 harness：路由 → 专家 → 评审退回 → 修正", () =>
     const result = events.find((e) => e.type === "plan");
     expect(result && result.type === "plan" && result.result.route.archetype).toBe("memory");
     expect(result && result.type === "plan" && result.result.checks.every((c) => c.ok)).toBe(true);
+  });
+});
+
+describe("今天：现在做哪一件", () => {
+  // 早上 07:05：晨跑的 07:00 时段到了；作品集 20:00 还没到
+  const morning: Snapshot = { ...snapshot, now: "07:05" };
+
+  it("到了固定时段的事排第一；时段未到的放进“今天还有”，不进“现在”", () => {
+    const brief = buildBrief(morning);
+    expect(brief.now?.itemId).toBe("r1");
+    expect(brief.now?.reasons[0]).toContain("07:00");
+    expect(brief.laterToday.map((l) => l.itemId)).toContain("p1");
+    expect([brief.now, ...brief.also].map((p) => p?.itemId)).not.toContain("p1");
+  });
+
+  it("换一件：跳过的不再出现在现在和备选里", () => {
+    const brief = buildBrief(morning, { skip: ["r1"] });
+    expect(brief.now?.itemId).not.toBe("r1");
+    expect(brief.also.map((a) => a.itemId)).not.toContain("r1");
+  });
+
+  it("模型把时段未到的事排进“现在”会被退回，改正后合并", async () => {
+    const bad = { now: { itemId: "p1", reason: "最重要", firstAction: "打开作品集" }, also: [], message: "先做作品集" };
+    const good = { now: { itemId: "l1", reason: "最近 5 次忘了 3 次，先复习", firstAction: "遮住释义默写 10 个词" }, also: [{ itemId: "r1", reason: "07:00 时段到了" }], message: "先稳住单词，再去跑步" };
+    const { events, emit } = collect();
+    await runToday({ snapshot: morning }, mockAi([step(call("submit_today", bad)), step(call("submit_today", good))]), emit);
+    expect(events.filter((e) => e.type === "rejected")).toHaveLength(1);
+    const today = events.find((e) => e.type === "today");
+    if (today?.type !== "today") throw new Error("no brief");
+    expect(today.brief).toMatchObject({ source: "model", now: { itemId: "l1", firstAction: "遮住释义默写 10 个词" }, message: "先稳住单词，再去跑步" });
+    expect(today.brief.now?.minutes).toBe(20);
   });
 });
 

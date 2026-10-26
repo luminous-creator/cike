@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { offlinePlan, offlineReview } from '@contracts/fallback'
+import { buildBrief, type TodayBrief } from '@contracts/today'
 import type { HarnessEvent, ReviewMode, Snapshot } from '@contracts/harness'
 import { localDate } from '@/lib/scheduler'
 import type { AppData } from '@/types'
@@ -71,6 +72,31 @@ export async function requestReview(input: { mode: ReviewMode; itemId?: string; 
     offlineReview(input, onEvent, '服务端不可用，在本机按规则评判')
     onEvent({ type: 'done', durationMs: 0, steps: 0, model: null })
   }
+}
+
+/** 每件事的“第一步”：优先用方案里的，其次用最近一次评判的下一步 */
+export function firstActionsOf(data: AppData): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const item of data.items) {
+    const action = item.plan?.firstAction ?? (item.judgement && !item.judgement.resolved ? item.judgement.nextAction : undefined)
+    if (action) map[item.id] = action
+  }
+  return map
+}
+
+export async function requestToday(input: { snapshot: Snapshot; skip?: string[]; firstActions?: Record<string, string> }, signal?: AbortSignal): Promise<{ brief: TodayBrief; error?: string }> {
+  let brief: TodayBrief | null = null
+  let error: string | undefined
+  try {
+    await stream('/api/today', input, (event) => {
+      if (event.type === 'today') brief = event.brief
+      if (event.type === 'error') error = event.message
+    }, signal)
+  } catch (cause) {
+    if (signal?.aborted) throw cause
+    error = '服务端不可用，用的是本机规则'
+  }
+  return { brief: brief ?? buildBrief(input.snapshot, input), error }
 }
 
 export interface AiStatus { configured: boolean; label: string; model: string | null; online: boolean }

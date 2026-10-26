@@ -84,6 +84,7 @@ app.route("/api/analyze", analyzeRoutes);
 // 动态 harness：规划（路由 → 专家 → 评审）与复盘（评判 + 归纳），NDJSON 流式返回
 app.post("/api/plan", bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.body(null, 413) }));
 app.post("/api/review", bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.body(null, 413) }));
+app.post("/api/today", bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.body(null, 413) }));
 app.route("/api", harnessRoutes);
 app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
 
