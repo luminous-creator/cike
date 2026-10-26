@@ -37,6 +37,10 @@ export interface AiBackend {
 const PROVIDER = "cike";
 
 function customConfig() {
+  // 还没有密钥时重读一次 .env：填好密钥后不用重启服务
+  if (!read("AI_API_KEY") && !read("DEEPSEEK_API_KEY")) {
+    try { process.loadEnvFile(); } catch { /* 没有 .env */ }
+  }
   const apiKey = read("AI_API_KEY") ?? read("DEEPSEEK_API_KEY");
   if (!apiKey) return null;
   const baseURL = (read("AI_BASE_URL") ?? "https://api.deepseek.com").replace(/\/+$/, "");
