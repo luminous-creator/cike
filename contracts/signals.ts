@@ -203,6 +203,13 @@ export function slotConflict(snapshot: Snapshot, timeSlot: string, minutes: numb
 function checkProposal(p: Proposal, s: ItemSignals, ctx: VerifyContext): string[] {
   const errors: string[] = []
   const isProject = s.archetype === 'project'
+  // 临近截止：可以缩短单次、降低启动门槛，但不能降频或拉长间隔
+  if (s.daysToDeadline !== null && s.daysToDeadline >= 0 && s.daysToDeadline <= 14) {
+    const currentPerWeek = s.sessionsPerWeek ?? 7 / Math.max(1, s.intervalDays)
+    if (p.kind === 'set_session' && p.sessionsPerWeek < currentPerWeek) errors.push(`距截止只剩 ${s.daysToDeadline} 天，不要把频率从每周 ${Math.round(currentPerWeek)} 次降到 ${p.sessionsPerWeek} 次；可以保持频率、缩短单次时长`)
+    if (p.kind === 'set_interval' && p.days > s.intervalDays) errors.push(`距截止只剩 ${s.daysToDeadline} 天，不要拉长间隔`)
+    if (p.kind === 'pause' || p.kind === 'postpone') errors.push(`距截止只剩 ${s.daysToDeadline} 天，不要暂停或顺延`)
+  }
   switch (p.kind) {
     case 'set_interval':
       if (s.type !== 'routine') errors.push('set_interval 只能用于周期行动；学习复习的间隔由每次回忆结果自动调整')

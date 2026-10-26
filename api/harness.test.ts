@@ -172,6 +172,20 @@ describe("复盘 harness：评判 → 校验 → 规则补齐", () => {
     expect(review.result.stats.rejected).toBe(1);
   });
 
+  it("临近截止时，模型提议降频会被退回，改成缩短单次才接受", async () => {
+    const near: Snapshot = { ...snapshot, items: snapshot.items.map((i) => (i.id === "p1" ? { ...i, deadline: "2026-11-07" } : i)) };
+    const base = { itemId: "p1", verdict: "rhythm_off", summary: "计划频率过高", evidence: ["近两周完成 1 次 / 计划约 10 次"], nextAction: "今晚只练开场 30 秒" };
+    const fewer = { ...base, proposal: { kind: "set_session", minutes: 60, sessionsPerWeek: 3 } };
+    const shorter = { ...base, proposal: { kind: "set_session", minutes: 45, sessionsPerWeek: 5 } };
+    const { events, emit } = collect();
+    await runReview({ mode: "single", itemId: "p1", snapshot: near }, mockAi([step(call("submit_judgement", fewer)), step(call("submit_judgement", shorter))]), emit);
+    const rejected = events.filter((e) => e.type === "rejected");
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].type === "rejected" && rejected[0].errors.join()).toContain("不要把频率");
+    const review = events.find((e) => e.type === "review");
+    expect(review?.type === "review" && review.result.judgements[0].proposal).toMatchObject({ sessionsPerWeek: 5, minutes: 45 });
+  });
+
   it("没接模型时给出完整的规则评判与归纳", async () => {
     const { events, emit } = collect();
     await runReview({ mode: "full", snapshot }, null, emit);

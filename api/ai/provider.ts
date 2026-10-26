@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { parseEnv } from "node:util";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
 import { AiMisconfigured, listModels } from "../ai-client";
@@ -37,9 +39,13 @@ export interface AiBackend {
 const PROVIDER = "cike";
 
 function customConfig() {
-  // 还没有密钥时重读一次 .env：填好密钥后不用重启服务
+  // 还没有密钥时重读 .env：填好密钥后不用重启服务。
+  // 不能用 loadEnvFile——启动时读进来的空值也算"已存在"，不会被覆盖。
   if (!read("AI_API_KEY") && !read("DEEPSEEK_API_KEY")) {
-    try { process.loadEnvFile(); } catch { /* 没有 .env */ }
+    try {
+      const fresh = parseEnv(readFileSync(".env", "utf8"));
+      for (const [key, value] of Object.entries(fresh)) if (!read(key) && value) process.env[key] = value;
+    } catch { /* 没有 .env */ }
   }
   const apiKey = read("AI_API_KEY") ?? read("DEEPSEEK_API_KEY");
   if (!apiKey) return null;
