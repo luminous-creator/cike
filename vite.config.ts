@@ -8,6 +8,8 @@ import { inspectAttr } from 'kimi-plugin-inspect-react'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // 相对路径：静态托管在子路径（如 GitHub Pages 的 /cike/）也能装到手机桌面
+  base: "./",
   plugins: [
     devServer({ entry: "api/boot.ts", exclude: [/^\/(?!api\/).*$/] }),
     inspectAttr(),

@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Bell, BellOff, BookMarked, Cpu, Download, HardDrive, Plus, Search, Sparkles, Timer, Upload } from 'lucide-react'
+import { Bell, BellOff, BookMarked, Download, HardDrive, Plus, Search, Sparkles, Timer, Upload } from 'lucide-react'
 import { PLAYBOOKS, REFS, ARCHETYPES } from '@contracts/playbooks'
 import type { AiStatus } from '@/lib/harness'
 import { ItemRow } from '@/components/ItemRow'
+import { ModelSettings } from '@/components/ModelSettings'
 import { localDate, recommendedItems } from '@/lib/scheduler'
 import type { AppData, Item } from '@/types'
 
@@ -109,10 +110,7 @@ export function SettingsView({ notificationState, capacity, ai, onCapacity, onTo
         <div className="settings-copy"><Timer size={21} /><div><h2>每天能拿出多少时间</h2><p>规划时用它控制总量：新任务加进来后，每周计划不会超过这个上限；复盘也据此判断哪件事投入多了、哪件少了。</p></div></div>
         <label className="capacity-field"><input type="number" min={15} max={960} step={15} value={capacity} onChange={(e) => onCapacity(Number(e.target.value))} aria-label="每天可支配分钟" /><span>分钟 / 天</span></label>
       </section>
-      <section className="settings-section">
-        <div className="settings-copy"><Cpu size={21} /><div><h2>模型接入</h2><p>{ai?.configured ? `已接入 ${ai.label}${ai.model ? `（${ai.model}）` : ''}。规划与复盘由模型执行，每条输出都要过规则评审。` : '未接入模型时，规划与复盘按策略库规则运行，仍然可用。接入方法：在项目根目录 .env 填写 DEEPSEEK_API_KEY 后重启。'}</p></div></div>
-        <span className={`model-badge ${ai?.configured ? 'on' : ''}`}><i />{ai ? (ai.configured ? '已接入' : ai.online ? '规则模式' : '离线') : '检测中'}</span>
-      </section>
+      <ModelSettings ai={ai} />
       <section className="settings-section">
         <div className="settings-copy"><Bell size={21} /><div><h2>到点提醒</h2><p>应用开着时，到了固定时段会弹通知；重新打开时补看遗漏项目。</p></div></div>
         <button className="button-secondary" onClick={onToggleNotifications}>{notificationState === 'granted' ? <BellOff size={17} /> : <Bell size={17} />}{notificationState === 'granted' ? '通知已开启' : '开启浏览器通知'}</button>
@@ -125,7 +123,7 @@ export function SettingsView({ notificationState, capacity, ai, onCapacity, onTo
         <div className="settings-copy"><HardDrive size={21} /><div><h2>本地数据与备份</h2><p>数据只保存在当前浏览器。清除浏览器数据前，请先导出备份。</p></div></div>
         <div className="backup-actions"><button className="button-secondary" onClick={onExport}><Download size={17} />导出备份</button><label className="button-secondary file-button"><Upload size={17} />导入备份<input type="file" accept="application/json,.json" onChange={(e) => { const file = e.target.files?.[0]; if (file) onImport(file); e.target.value = '' }} /></label></div>
       </section>
-      <section className="learning-note"><Sparkles size={20} /><div><h2>AI 与隐私</h2><p>只有点击“开始规划”或“开始复盘”时，任务名称、分类、时段和打卡记录（含备注）才会由服务端发给模型；不会保存在服务端。模型只提议，采用与否由你决定。</p></div></section>
+      <section className="learning-note"><Sparkles size={20} /><div><h2>AI 与隐私</h2><p>只有点击“开始规划”或“开始复盘”时，任务名称、分类、时段和打卡记录（含备注）才会发给你接入的模型（本设备直连，或经你自己的服务端）；不会另存在任何地方。模型只提议，采用与否由你决定。</p></div></section>
       <MethodsSection />
       <button className="text-danger" onClick={onReset}>清除全部本地数据</button>
     </div>

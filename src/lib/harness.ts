@@ -3,6 +3,7 @@ import { offlinePlan, offlineReview } from '@contracts/fallback'
 import { buildBrief, type TodayBrief } from '@contracts/today'
 import type { HarnessEvent, ReviewMode, Snapshot } from '@contracts/harness'
 import { localDate } from '@/lib/scheduler'
+import { buildBackend, loadModel, useModelConfig } from '@/lib/model'
 import type { AppData } from '@/types'
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -54,7 +55,29 @@ async function stream(path: string, body: unknown, onEvent: (event: HarnessEvent
   }
 }
 
+type Engine = typeof import('../../api/harness/engine')
+type Run = (engine: Engine, ai: ReturnType<typeof buildBackend>, emit: (event: HarnessEvent) => void, signal?: AbortSignal) => Promise<{ steps: number }>
+
+/** 设备上填了模型时，harness 直接在浏览器里跑（与服务端 routes/harness.ts 的事件流一致）；没填返回 false */
+async function runOnDevice(run: Run, onEvent: (event: HarnessEvent) => void, signal?: AbortSignal): Promise<boolean> {
+  const config = loadModel()
+  if (!config) return false
+  const engine = await import('../../api/harness/engine')
+  const ai = buildBackend(config)
+  const started = Date.now()
+  try {
+    const stats = await run(engine, ai, onEvent, signal)
+    onEvent({ type: 'done', durationMs: Date.now() - started, steps: stats.steps, model: ai.modelId })
+  } catch (error) {
+    if (signal?.aborted) throw error
+    onEvent({ type: 'error', ...engine.friendly(error) })
+    onEvent({ type: 'done', durationMs: Date.now() - started, steps: 0, model: ai.modelId })
+  }
+  return true
+}
+
 export async function requestPlan(input: { intent: string; answer?: { question: string; answer: string }; snapshot: Snapshot }, onEvent: (event: HarnessEvent) => void, signal?: AbortSignal) {
+  if (await runOnDevice((engine, ai, emit, s) => engine.runPlan(input, ai, emit, s), onEvent, signal)) return
   try {
     await stream('/api/plan', input, onEvent, signal)
   } catch (error) {
@@ -65,6 +88,7 @@ export async function requestPlan(input: { intent: string; answer?: { question: 
 }
 
 export async function requestReview(input: { mode: ReviewMode; itemId?: string; snapshot: Snapshot }, onEvent: (event: HarnessEvent) => void, signal?: AbortSignal) {
+  if (await runOnDevice((engine, ai, emit, s) => engine.runReview(input, ai, emit, s), onEvent, signal)) return
   try {
     await stream('/api/review', input, onEvent, signal)
   } catch (error) {
@@ -87,11 +111,12 @@ export function firstActionsOf(data: AppData): Record<string, string> {
 export async function requestToday(input: { snapshot: Snapshot; skip?: string[]; firstActions?: Record<string, string> }, signal?: AbortSignal): Promise<{ brief: TodayBrief; error?: string }> {
   let brief: TodayBrief | null = null
   let error: string | undefined
+  const collect = (event: HarnessEvent) => {
+    if (event.type === 'today') brief = event.brief
+    if (event.type === 'error') error = event.message
+  }
   try {
-    await stream('/api/today', input, (event) => {
-      if (event.type === 'today') brief = event.brief
-      if (event.type === 'error') error = event.message
-    }, signal)
+    if (!(await runOnDevice((engine, ai, emit, s) => engine.runToday(input, ai, emit, s), collect, signal))) await stream('/api/today', input, collect, signal)
   } catch (cause) {
     if (signal?.aborted) throw cause
     error = '服务端不可用，用的是本机规则'
@@ -99,17 +124,23 @@ export async function requestToday(input: { snapshot: Snapshot; skip?: string[];
   return { brief: brief ?? buildBrief(input.snapshot, input), error }
 }
 
-export interface AiStatus { configured: boolean; label: string; model: string | null; online: boolean }
+export interface AiStatus { configured: boolean; label: string; model: string | null; online: boolean; onDevice?: boolean }
 
 export function useAiStatus(): AiStatus | null {
+  const device = useModelConfig()
   const [status, setStatus] = useState<AiStatus | null>(null)
   useEffect(() => {
+    if (device) {
+      const { label, modelId } = buildBackend(device)
+      setStatus({ configured: true, label, model: modelId, online: true, onDevice: true })
+      return
+    }
     let alive = true
     fetch('/api/ai/status')
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((s: Omit<AiStatus, 'online'>) => alive && setStatus({ ...s, online: true }))
       .catch(() => alive && setStatus({ configured: false, label: '离线', model: null, online: false }))
     return () => { alive = false }
-  }, [])
+  }, [device])
   return status
 }
