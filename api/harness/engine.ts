@@ -15,9 +15,10 @@ import {
   type ItemSignals, type VerifyContext,
 } from "@contracts/signals";
 import { classifyAiError, AiInvalidRequest, AiMisconfigured, AiTransient, AiUnavailable, ContentRejected } from "../ai-client";
+import type { Mood } from "@contracts/ai";
 import type { AiBackend, Effort } from "../ai/provider";
 import { allPicks, buildBrief, mergeToday, todaySchema, verifyToday, type TodayModelOutput } from "@contracts/today";
-import { routerSystem, reviewSystem, specialistSystem, todaySystem } from "./prompts";
+import { routerSystem, reviewSystem, specialistSystem, takeSystem, todaySystem } from "./prompts";
 
 export type Emit = (event: HarnessEvent) => void;
 
@@ -45,6 +46,7 @@ function schemaOf(schema: ZodType) {
 interface SubmitLoop<T> {
   ai: AiBackend;
   effort: Effort;
+  mood: Mood;
   system: string;
   prompt: string;
   name: string;
@@ -90,6 +92,7 @@ async function submitLoop<T>(o: SubmitLoop<T>): Promise<{ value: T | null; last:
       tools: { [o.name]: submit },
       stopWhen: [stepCountIs(o.maxSteps), () => accepted !== null || rejected >= o.maxRejections],
       providerOptions: o.ai.options(o.effort),
+      temperature: o.ai.temperature(o.mood),
       maxRetries: 0,
       abortSignal: o.signal,
     });
@@ -126,7 +129,7 @@ export async function runPlan(
     let value: Route | null = null;
     try {
       ({ value } = await submitLoop<Route>({
-      ai, effort: "none", system: routerSystem(snapshot.today, categories), prompt: `用户说：${text}`,
+      ai, effort: "none", mood: "precise", system: routerSystem(snapshot.today, categories), prompt: `用户说：${text}`,
       name: "submit_route", description: "提交路由结果", schema: routeSchema,
       verify: (r) => (input.answer ? [] : verifyRoute(r)), target: "路由",
       maxSteps: 3, maxRejections: 2, emit, stats, signal,
@@ -169,7 +172,7 @@ export async function runPlan(
   if (ai) {
     try {
     const result = await submitLoop<Plan>({
-      ai, effort: "none", system: specialistSystem(archetype, ctx),
+      ai, effort: "none", mood: "warm", system: specialistSystem(archetype, ctx),
       prompt: `任务：${route.name}\n分类：${route.category}\n用户原话：${text}\n${route.deadline ? `截止：${route.deadline}\n` : ""}路由理由：${route.reason}`,
       name: "submit_plan", description: "提交这件事的执行方案", schema: planSchema,
       verify: (p) => checkPlan(p, archetype, snapshot).errors, target: "方案",
@@ -219,10 +222,63 @@ function compact(s: ItemSignals) {
   };
 }
 
+// ---------------------------------------------------------------- 大肥鱼的理解：对一件事说说看法
+
+/** 模型偶尔会带上 Markdown 或序号，展示前去掉 */
+function plainTake(text: string): string {
+  return text
+    .replace(/\*\*|__|`/g, "")
+    .replace(/^\s*(#{1,6}\s+|[-*•]\s+|\d+[.、)]\s*)/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 320);
+}
+
+export async function runTake(
+  input: { itemId: string; snapshot: Snapshot; plan?: string },
+  ai: AiBackend | null,
+  emit: Emit,
+  signal?: AbortSignal,
+): Promise<RunStats> {
+  const stats: RunStats = { steps: 0, tokens: 0, rejected: 0 };
+  const s = computeSignals(input.snapshot).get(input.itemId);
+  if (!s) {
+    emit({ type: "error", code: "invalid", message: "找不到这件事" });
+    return stats;
+  }
+  if (!ai) {
+    emit({ type: "error", code: "misconfigured", message: "大肥鱼还没接上模型：在设置里填好模型接入就能说话了" });
+    return stats;
+  }
+  emit({ type: "stage", stage: "agent", label: "大肥鱼在想", detail: `${ai.label} 读「${s.name}」的记录` });
+  try {
+    const result = await generateText({
+      model: ai.model,
+      system: takeSystem(input.snapshot.today),
+      prompt: JSON.stringify({ ...itemDetail(input.snapshot, s), plan: input.plan ?? null }),
+      providerOptions: ai.options("none"),
+      temperature: ai.temperature("chatty"),
+      maxOutputTokens: 600,
+      maxRetries: 0,
+      abortSignal: signal,
+    });
+    stats.steps = 1;
+    stats.tokens = result.totalUsage.totalTokens ?? 0;
+    const text = plainTake(result.text);
+    if (text.length < 10) emit({ type: "error", code: "empty", message: "大肥鱼这次没想好，再点一次试试" });
+    else emit({ type: "take", itemId: s.id, text });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    const info = friendly(error);
+    emit({ type: "error", code: info.code, message: info.message.replace(/，已改用规则结果。$/, "") });
+  }
+  return stats;
+}
+
 // ---------------------------------------------------------------- 今天：现在做哪一件
 
 export async function runToday(
-  input: { snapshot: Snapshot; skip?: string[]; firstActions?: Record<string, string> },
+  input: { snapshot: Snapshot; skip?: string[]; pull?: string[]; firstActions?: Record<string, string> },
   ai: AiBackend | null,
   emit: Emit,
   signal?: AbortSignal,
@@ -245,7 +301,7 @@ export async function runToday(
   emit({ type: "stage", stage: "agent", label: "模型重排", detail: `${ai.label} 从 ${picks.length} 件里挑` });
   try {
     const { value } = await submitLoop<TodayModelOutput>({
-      ai, effort: "none", system: todaySystem(snapshot.today, snapshot.now),
+      ai, effort: "none", mood: "warm", system: todaySystem(snapshot.today, snapshot.now),
       prompt: `候选（按规则分数从高到低）：\n${JSON.stringify(candidates)}\n固定时段未到（不能排进现在）：${JSON.stringify(brief.laterToday)}`,
       name: "submit_today", description: "提交今天现在做哪一件、还可以做什么", schema: todaySchema,
       verify: (out) => verifyToday(out, brief, picks.map((p) => p.itemId)), target: "今日安排",
@@ -382,6 +438,7 @@ export async function runReview(
           },
           onStepFinish: () => { stats.steps += 1; },
           providerOptions: ai.options(ai.defaultEffort),
+          temperature: ai.temperature("warm"),
           maxRetries: 0,
           abortSignal: signal,
         });

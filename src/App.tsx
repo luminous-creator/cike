@@ -9,7 +9,7 @@ import { ReviewView } from '@/components/ReviewView'
 import { HistoryView, ItemsView, SettingsView } from '@/components/Views'
 import { useLocalData } from '@/hooks/useLocalData'
 import { applyProposal } from '@/lib/apply'
-import { buildSnapshot, firstActionsOf, requestReview, requestToday, useAiStatus } from '@/lib/harness'
+import { buildSnapshot, firstActionsOf, requestReview, requestTake, requestToday, useAiStatus } from '@/lib/harness'
 import { allPicks, buildBrief, type TodayBrief } from '@contracts/today'
 import { verdictLabels } from '@/lib/labels'
 import { addDays, completeItem, isDue, localDate } from '@/lib/scheduler'
@@ -36,6 +36,7 @@ export default function App() {
   const [draft, setDraft] = useState<Partial<Item> | null>(null)
   const [plannerOpen, setPlannerOpen] = useState(false)
   const [judgingId, setJudgingId] = useState<string | null>(null)
+  const [takingId, setTakingId] = useState<string | null>(null)
   const ai = useAiStatus()
   const [checkInItem, setCheckInItem] = useState<Item | null>(null)
   const [toast, setToast] = useState('')
@@ -53,11 +54,15 @@ export default function App() {
   const skipKey = `cike.skip.${localDate()}`
   const [skipToday, setSkipToday] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(skipKey) ?? '[]') } catch { return [] } })
   const updateSkip = useCallback((next: string[]) => { setSkipToday(next); try { localStorage.setItem(skipKey, JSON.stringify(next)) } catch { /* 仅本次有效 */ } }, [skipKey])
+  // 「今天还有」里手动提上日程的事，当天有效
+  const pullKey = `cike.pull.${localDate()}`
+  const [pullToday, setPullToday] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(pullKey) ?? '[]') } catch { return [] } })
+  const updatePull = useCallback((next: string[]) => { setPullToday(next); try { localStorage.setItem(pullKey, JSON.stringify(next)) } catch { /* 仅本次有效 */ } }, [pullKey])
   useEffect(() => { const timer = window.setInterval(() => setMinute(Math.floor(Date.now() / 60_000)), 30_000); return () => window.clearInterval(timer) }, [])
-  const todayInput = useMemo(() => ({ snapshot: buildSnapshot(data), skip: skipToday, firstActions: firstActionsOf(data) }),
+  const todayInput = useMemo(() => ({ snapshot: buildSnapshot(data), skip: skipToday, pull: pullToday, firstActions: firstActionsOf(data) }),
     // minute 让固定时段到点时重新排序
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data, skipToday, minute])
+    [data, skipToday, pullToday, minute])
   const ruleBrief = useMemo(() => buildBrief(todayInput.snapshot, todayInput), [todayInput])
   const candidateIds = useMemo(() => new Set(allPicks(todayInput.snapshot, todayInput).map((p) => p.itemId)), [todayInput])
   const brief: TodayBrief = useMemo(() => {
@@ -202,13 +207,34 @@ export default function App() {
     setData(next)
     setCheckInItem(null)
     // 做完一件，直接告诉下一件是什么
-    const following = buildBrief(buildSnapshot(next), { skip: skipToday, firstActions: firstActionsOf(next) }).now
+    const following = buildBrief(buildSnapshot(next), { skip: skipToday, pull: pullToday, firstActions: firstActionsOf(next) }).now
     const done = checkIn.rating ? '已记录，复习间隔已调整' : '做完了'
     showToast(following ? `${done} · 下一件：${following.name}` : `${done} · 今天的都做完了`)
   }
 
   function swapNow(itemId: string) {
     updateSkip([...skipToday, itemId])
+  }
+
+  function pullForward(item: Item) {
+    updatePull([...pullToday.filter((id) => id !== item.id), item.id])
+    if (skipToday.includes(item.id)) updateSkip(skipToday.filter((id) => id !== item.id))
+    // 模型排过的“现在”会盖住规则版，提上日程后以用户的选择为准
+    setData((current) => ({ ...current, todayBrief: undefined }))
+    showToast(`「${item.name}」提上日程，现在就做`)
+  }
+
+  async function takeItem(item: Item) {
+    if (takingId) return
+    setTakingId(item.id)
+    try {
+      const plan = item.plan ? `${item.plan.method}；第一步：${item.plan.firstAction}；步骤：${item.plan.steps.map((step) => step.title).join(' → ')}`.slice(0, 600) : undefined
+      const { text, error } = await requestTake({ itemId: item.id, snapshot: buildSnapshot(data), plan })
+      if (text) setData((current) => ({ ...current, items: current.items.map((entry) => entry.id === item.id ? { ...entry, take: { text, generatedAt: new Date().toISOString() } } : entry) }))
+      else showToast(error ?? '大肥鱼这次没想好')
+    } finally {
+      setTakingId(null)
+    }
   }
 
   function notToday(item: Item) {
@@ -291,8 +317,8 @@ export default function App() {
       <header className="mobile-header"><div className="mobile-brand"><span>＋＋</span><strong>此刻</strong></div><button className="icon-button" onClick={openNew} aria-label="新建项目"><Plus size={21} /></button></header>
 
       <main className="main-content">
-        {view === 'today' && <TodayView data={data} brief={brief} restItems={restItems} ai={ai} arranging={arranging} skippedCount={skipToday.length} onArrange={() => void arrangeToday()} onDone={(item) => requestCheckIn(item, item.type === 'learning')} onCheckIn={requestCheckIn} onSwap={swapNow} onNotToday={notToday} onResetSkip={() => updateSkip([])} onNew={openNew} {...judgeProps} />}
-        {view === 'items' && <ItemsView data={data} onCheckIn={requestCheckIn} onNew={openNew} onEdit={(item) => { setDraft(null); setEditingItem(item); setItemDialog(true) }} onTogglePause={togglePause} onDelete={deleteItem} {...judgeProps} />}
+        {view === 'today' && <TodayView data={data} brief={brief} restItems={restItems} ai={ai} arranging={arranging} skippedCount={skipToday.length} onArrange={() => void arrangeToday()} onDone={(item) => requestCheckIn(item, item.type === 'learning')} onCheckIn={requestCheckIn} onSwap={swapNow} onNotToday={notToday} onPull={pullForward} onResetSkip={() => updateSkip([])} onNew={openNew} {...judgeProps} />}
+        {view === 'items' && <ItemsView data={data} canTake={Boolean(ai?.configured)} onTake={(item) => void takeItem(item)} takingId={takingId} onCheckIn={requestCheckIn} onNew={openNew} onEdit={(item) => { setDraft(null); setEditingItem(item); setItemDialog(true) }} onTogglePause={togglePause} onDelete={deleteItem} {...judgeProps} />}
         {view === 'review' && <ReviewView data={data} ai={ai} onSave={saveReview} onApply={applyJudgement} onDismiss={dismissJudgement} onCheckIn={requestCheckIn} />}
         {view === 'history' && <HistoryView data={data} />}
         {view === 'settings' && <SettingsView notificationState={notificationState} capacity={data.settings.capacityMinutesPerDay} ai={ai} onCapacity={setCapacity} onToggleNotifications={toggleNotifications} onExport={exportData} onImport={handleImport} onInstall={installApp} onReset={resetData} />}

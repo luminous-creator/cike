@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { parseEnv } from "node:util";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
+import { temperatureFor, type Mood } from "@contracts/ai";
 import { AiMisconfigured, listModels } from "../ai-client";
 
 // 两种接入方式，自动识别：
@@ -34,6 +35,7 @@ export interface AiBackend {
   /** 按调用设置思考强度；不支持的后端返回 undefined */
   options: (effort: Effort) => Record<string, Record<string, string>> | undefined;
   defaultEffort: Effort;
+  temperature: (mood: Mood) => number;
 }
 
 const PROVIDER = "cike";
@@ -82,12 +84,13 @@ export async function resolveAi(): Promise<AiBackend | null> {
       model: provider(custom.modelId),
       options: (effort) => (sendsEffort ? { [PROVIDER]: { reasoningEffort: effort } } : undefined),
       defaultEffort: custom.effortEnv ?? "low",
+      temperature: temperatureFor(custom.isDeepSeek),
     };
   }
   if (read("KIMI_AGENTGW_API_KEY") && read("KIMI_AGENTGW_BASE_URL")) {
     // 平台约定：不要硬编码模型 id，运行时读 default_model_id
     if (!cachedKimiModel) cachedKimiModel = (await listModels()).defaultModelId;
-    return { kind: "kimi", label: "Kimi 网关", modelId: cachedKimiModel, model: kimiGw(cachedKimiModel), options: () => undefined, defaultEffort: "none" };
+    return { kind: "kimi", label: "Kimi 网关", modelId: cachedKimiModel, model: kimiGw(cachedKimiModel), options: () => undefined, defaultEffort: "none", temperature: temperatureFor(false) };
   }
   return null;
 }

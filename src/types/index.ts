@@ -50,6 +50,8 @@ export interface Item {
   deadline?: string
   plan?: StoredPlan
   judgement?: StoredJudgement
+  /** 大肥鱼对这件事的理解与看法，点「更新一下」重新生成 */
+  take?: { text: string; generatedAt: string }
   /** 旧版三条分析，保留展示 */
   analysis?: TaskAnalysis
 }

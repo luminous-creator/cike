@@ -108,7 +108,7 @@ export function firstActionsOf(data: AppData): Record<string, string> {
   return map
 }
 
-export async function requestToday(input: { snapshot: Snapshot; skip?: string[]; firstActions?: Record<string, string> }, signal?: AbortSignal): Promise<{ brief: TodayBrief; error?: string }> {
+export async function requestToday(input: { snapshot: Snapshot; skip?: string[]; pull?: string[]; firstActions?: Record<string, string> }, signal?: AbortSignal): Promise<{ brief: TodayBrief; error?: string }> {
   let brief: TodayBrief | null = null
   let error: string | undefined
   const collect = (event: HarnessEvent) => {
@@ -122,6 +122,23 @@ export async function requestToday(input: { snapshot: Snapshot; skip?: string[];
     error = '服务端不可用，用的是本机规则'
   }
   return { brief: brief ?? buildBrief(input.snapshot, input), error }
+}
+
+/** 大肥鱼对一件事的理解；没接模型或失败时返回 error */
+export async function requestTake(input: { itemId: string; snapshot: Snapshot; plan?: string }, signal?: AbortSignal): Promise<{ text?: string; error?: string }> {
+  let text: string | undefined
+  let error: string | undefined
+  const collect = (event: HarnessEvent) => {
+    if (event.type === 'take') text = event.text
+    if (event.type === 'error') error = event.message
+  }
+  try {
+    if (!(await runOnDevice((engine, ai, emit, s) => engine.runTake(input, ai, emit, s), collect, signal))) await stream('/api/take', input, collect, signal)
+  } catch (cause) {
+    if (signal?.aborted) throw cause
+    error = '连不上模型，等会儿再问问大肥鱼'
+  }
+  return { text, error: text ? undefined : error ?? '大肥鱼这次没想好，再点一次试试' }
 }
 
 export interface AiStatus { configured: boolean; label: string; model: string | null; online: boolean; onDevice?: boolean }

@@ -38,11 +38,19 @@ function defaultFirstAction(s: ItemSignals): string {
 
 interface Candidate { s: ItemSignals; score: number; reasons: string[]; slotState: 'now' | 'later' | 'missed' | 'none' }
 
-export function buildBrief(snapshot: Snapshot, opts: { skip?: string[]; firstActions?: Record<string, string> } = {}): TodayBrief {
+export interface BriefOptions {
+  skip?: string[]
+  /** 用户手动“提上日程”的事：固定时段没到也当成现在可做，并排在最前 */
+  pull?: string[]
+  firstActions?: Record<string, string>
+}
+
+export function buildBrief(snapshot: Snapshot, opts: BriefOptions = {}): TodayBrief {
   const signals = computeSignals(snapshot)
   const balance = new Map(computeBalance(snapshot, signals).map((r) => [r.itemId, r]))
   const nowMin = snapshot.now ? minutesOf(snapshot.now) : 12 * 60
   const skip = new Set(opts.skip ?? [])
+  const pull = new Set(opts.pull ?? [])
   const pick = (c: Candidate): TodayPick => ({
     itemId: c.s.id, name: c.s.name, minutes: c.s.sessionMinutes, timeSlot: c.s.timeSlot,
     reasons: c.reasons.slice(0, 3), firstAction: opts.firstActions?.[c.s.id] ?? defaultFirstAction(c.s),
@@ -56,7 +64,8 @@ export function buildBrief(snapshot: Snapshot, opts: { skip?: string[]; firstAct
     const reasons: string[] = []
     let score = 0
     let slotState: Candidate['slotState'] = 'none'
-    if (s.timeSlot) {
+    if (pull.has(s.id)) { slotState = 'now'; score += 200; reasons.push(s.timeSlot ? `你把 ${s.timeSlot} 的这件提前了` : '你刚提上日程') }
+    else if (s.timeSlot) {
       const delta = nowMin - minutesOf(s.timeSlot)
       if (delta >= -15 && delta <= 60) { slotState = 'now'; score += 100; reasons.push(`${s.timeSlot} 的固定时段到了`) }
       else if (delta < -15) { slotState = 'later'; score -= 50 }
@@ -140,7 +149,7 @@ export function mergeToday(brief: TodayBrief, out: TodayModelOutput, picks: Map<
 }
 
 /** 规则版的全部候选（含未展示的），供模型挑选与合并 */
-export function allPicks(snapshot: Snapshot, opts: { skip?: string[]; firstActions?: Record<string, string> } = {}): TodayPick[] {
+export function allPicks(snapshot: Snapshot, opts: BriefOptions = {}): TodayPick[] {
   const brief = buildBrief(snapshot, opts)
   const picks: TodayPick[] = [...(brief.now ? [brief.now] : []), ...brief.also]
   // 其余候选：逐个排除已选，再跑一次拿到剩下的

@@ -276,7 +276,7 @@
   .today-empty { flex-wrap: wrap; }
   .today-empty > button { margin-left: 0; width: 100%; }
   .later-row { grid-template-columns: 52px minmax(0, 1fr) auto; }
-  .later-row svg { display: none; }
+  .later-row > svg { display: none; }
 }
 
 /* 设置：模型接入 */
@@ -293,3 +293,12 @@
 .model-result.ok { color: var(--accent); }
 .model-result.bad { color: var(--red-700); }
 @media (max-width: 760px) { .model-form { padding-left: 0; } }
+
+/* 项目页：大肥鱼的理解 */
+.item-take { margin-top: 12px; padding: 10px 14px 12px; max-width: 640px; border-radius: 3px; background: var(--accent-soft); }
+.item-take h4 { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 4px; font-size: 12px; font-weight: 700; color: var(--accent); }
+.item-take .text-button { min-height: 28px; padding: 0 4px; font-size: 11.5px; color: var(--accent); }
+.item-take p { margin: 0; font-size: 13px; line-height: 1.75; color: var(--ink); white-space: pre-line; }
+.item-take .item-take-empty { color: var(--ink-muted); font-size: 12px; }
+.later-row .text-button { min-height: 32px; font-size: 12px; color: var(--accent); }
+.later-row .text-button svg { color: currentColor; }

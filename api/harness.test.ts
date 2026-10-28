@@ -4,7 +4,7 @@ import type { HarnessEvent, Snapshot } from "@contracts/harness";
 import { checkPlan, autoFixPlan, rulePlan, ruleRoute } from "@contracts/planner";
 import { computeBalance, computeSignals, planReview, ruleJudgement } from "@contracts/signals";
 import { keywordRoute, reviewPreview, ridgelineCap } from "@contracts/playbooks";
-import { runPlan, runReview, runToday } from "./harness/engine";
+import { runPlan, runReview, runTake, runToday } from "./harness/engine";
 import { buildBrief } from "@contracts/today";
 import type { AiBackend } from "./ai/provider";
 
@@ -35,7 +35,7 @@ const step = (...content: ReturnType<typeof call>[]) => ({ content, finishReason
 function mockAi(script: ReturnType<typeof step>[]): AiBackend {
   const queue = [...script];
   return {
-    kind: "custom", label: "Mock", modelId: "mock-model", defaultEffort: "none", options: () => undefined,
+    kind: "custom", label: "Mock", modelId: "mock-model", defaultEffort: "none", options: () => undefined, temperature: () => 1,
     model: new MockLanguageModelV3({
       doGenerate: async () => queue.shift() ?? { content: [{ type: "text", text: "完成" }], finishReason: { unified: "stop", raw: "stop" }, usage, warnings: [] },
     }),
@@ -174,6 +174,13 @@ describe("今天：现在做哪一件", () => {
     expect(brief.also.map((a) => a.itemId)).not.toContain("r1");
   });
 
+  it("提上日程：时段没到的事提到“现在”，不再留在“今天还有”", () => {
+    const brief = buildBrief(morning, { pull: ["p1"] });
+    expect(brief.now?.itemId).toBe("p1");
+    expect(brief.now?.reasons[0]).toContain("20:00");
+    expect(brief.laterToday.map((l) => l.itemId)).not.toContain("p1");
+  });
+
   it("模型把时段未到的事排进“现在”会被退回，改正后合并", async () => {
     const bad = { now: { itemId: "p1", reason: "最重要", firstAction: "打开作品集" }, also: [], message: "先做作品集" };
     const good = { now: { itemId: "l1", reason: "最近 5 次忘了 3 次，先复习", firstAction: "遮住释义默写 10 个词" }, also: [{ itemId: "r1", reason: "07:00 时段到了" }], message: "先稳住单词，再去跑步" };
@@ -184,6 +191,24 @@ describe("今天：现在做哪一件", () => {
     if (today?.type !== "today") throw new Error("no brief");
     expect(today.brief).toMatchObject({ source: "model", now: { itemId: "l1", firstAction: "遮住释义默写 10 个词" }, message: "先稳住单词，再去跑步" });
     expect(today.brief.now?.minutes).toBe(20);
+  });
+});
+
+describe("大肥鱼的理解", () => {
+  it("去掉 Markdown 和序号，按事项返回；没接模型时给出提示", async () => {
+    const reply = "**我理解的**\n1. 作品集其实是在讲你自己 🐟\n- 一周只推了 1 次 90 分钟，有点慢";
+    const ai = mockAi([]);
+    ai.model = new MockLanguageModelV3({ doGenerate: async () => ({ content: [{ type: "text", text: reply }], finishReason: { unified: "stop", raw: "stop" }, usage, warnings: [] }) });
+    const { events, emit } = collect();
+    await runTake({ itemId: "p1", snapshot }, ai, emit);
+    const take = events.find((e) => e.type === "take");
+    if (take?.type !== "take") throw new Error("no take");
+    expect(take.itemId).toBe("p1");
+    expect(take.text).toBe("我理解的\n作品集其实是在讲你自己 🐟\n一周只推了 1 次 90 分钟，有点慢");
+
+    const offline = collect();
+    await runTake({ itemId: "p1", snapshot }, null, offline.emit);
+    expect(offline.events[0]).toMatchObject({ type: "error", code: "misconfigured" });
   });
 });
 

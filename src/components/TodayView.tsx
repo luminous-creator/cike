@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowRightLeft, Bell, Check, ChevronDown, LoaderCircle, MoonStar, Plus, Sparkles } from 'lucide-react'
+import { ArrowRightLeft, Bell, CalendarPlus, Check, ChevronDown, LoaderCircle, MoonStar, Plus, Sparkles } from 'lucide-react'
 import type { TodayBrief, TodayPick } from '@contracts/today'
 import { ItemRow } from '@/components/ItemRow'
 import type { AiStatus } from '@/lib/harness'
@@ -18,11 +18,12 @@ interface Props extends JudgeProps {
   onCheckIn: (item: Item, detailed?: boolean) => void
   onSwap: (itemId: string) => void
   onNotToday: (item: Item) => void
+  onPull: (item: Item) => void
   onResetSkip: () => void
   onNew: () => void
 }
 
-export function TodayView({ data, brief, restItems, ai, arranging, skippedCount, onArrange, onDone, onCheckIn, onSwap, onNotToday, onResetSkip, onNew, ...judge }: Props) {
+export function TodayView({ data, brief, restItems, ai, arranging, skippedCount, onArrange, onDone, onCheckIn, onSwap, onNotToday, onPull, onResetSkip, onNew, ...judge }: Props) {
   const [showRest, setShowRest] = useState(false)
   const byId = new Map(data.items.map((item) => [item.id, item]))
   const nowItem = brief.now ? byId.get(brief.now.itemId) : undefined
@@ -69,9 +70,13 @@ export function TodayView({ data, brief, restItems, ai, arranging, skippedCount,
 
       {brief.laterToday.length > 0 && <section className="today-block">
         <h2>今天还有</h2>
-        {brief.laterToday.map((l) => <div key={l.itemId} className="later-row">
-          <time>{l.timeSlot}</time><strong>{l.name}</strong><span>{l.minutes} 分钟</span><Bell size={14} aria-label="到点提醒" />
-        </div>)}
+        {brief.laterToday.map((l) => {
+          const item = byId.get(l.itemId)
+          return <div key={l.itemId} className="later-row">
+            <time>{l.timeSlot}</time><strong>{l.name}</strong><span>{l.minutes} 分钟</span>
+            {item ? <button className="text-button" onClick={() => onPull(item)} title="不等到点，现在就做"><CalendarPlus size={14} />提上日程</button> : <Bell size={14} aria-label="到点提醒" />}
+          </div>
+        })}
       </section>}
 
       {brief.tomorrow.length > 0 && <section className="today-block tomorrow">

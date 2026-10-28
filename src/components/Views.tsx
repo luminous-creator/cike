@@ -22,13 +22,16 @@ export interface JudgeProps {
 
 
 interface ItemsProps extends CommonProps, JudgeProps {
+  canTake: boolean
+  onTake: (item: Item) => void
+  takingId: string | null
   onNew: () => void
   onEdit: (item: Item) => void
   onTogglePause: (item: Item) => void
   onDelete: (item: Item) => void
 }
 
-export function ItemsView({ data, onCheckIn, onNew, onEdit, onTogglePause, onDelete, onJudge, onApply, onDismiss, judgingId }: ItemsProps) {
+export function ItemsView({ data, canTake, onTake, takingId, onCheckIn, onNew, onEdit, onTogglePause, onDelete, onJudge, onApply, onDismiss, judgingId }: ItemsProps) {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('全部分类')
   const categories = ['全部分类', ...new Set(data.items.map((item) => item.category))]
@@ -48,7 +51,7 @@ export function ItemsView({ data, onCheckIn, onNew, onEdit, onTogglePause, onDel
         <span>{filtered.length} 个项目</span>
       </div>
       <div className="item-list all-items-list">
-        {filtered.map((item) => <ItemRow key={item.id} item={item} checkIns={data.checkIns} onCheckIn={onCheckIn} onEdit={onEdit} onTogglePause={onTogglePause} onDelete={onDelete} onJudge={onJudge} onApply={onApply} onDismiss={onDismiss} judging={judgingId === item.id} />)}
+        {filtered.map((item) => <ItemRow key={item.id} item={item} checkIns={data.checkIns} onCheckIn={onCheckIn} onEdit={onEdit} onTogglePause={onTogglePause} onDelete={onDelete} onJudge={onJudge} onApply={onApply} onDismiss={onDismiss} judging={judgingId === item.id} onTake={canTake || item.take ? onTake : undefined} taking={takingId === item.id} />)}
         {!filtered.length && <div className="empty-state"><h3>{data.items.length ? '没有匹配的项目' : '清单还是空的'}</h3><p>{data.items.length ? '换个关键词或分类试试。' : '先记下一件想做的事，一次完成也可以。'}</p><button className="button-primary" onClick={onNew}><Plus size={18} />新建项目</button></div>}
       </div>
     </div>

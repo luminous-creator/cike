@@ -165,7 +165,17 @@ export const planRequestSchema = z.object({
 export const todayRequestSchema = z.object({
   snapshot: snapshotSchema,
   skip: z.array(z.string()).max(200).optional(),
+  pull: z.array(z.string()).max(200).optional(),
   firstActions: z.record(z.string(), z.string().max(60)).optional(),
+})
+
+// ---------- 大肥鱼的理解：对一件事说说看法 ----------
+
+export const takeRequestSchema = z.object({
+  itemId: z.string(),
+  snapshot: snapshotSchema,
+  /** 方案摘要（方法、第一步），快照里没有 */
+  plan: z.string().max(600).optional(),
 })
 
 export interface AgendaEntry { itemId: string; name: string; reasons: string[]; score: number }
@@ -204,5 +214,6 @@ export type HarnessEvent =
   | { type: 'plan'; result: PlanResult }
   | { type: 'review'; result: ReviewResult }
   | { type: 'today'; brief: TodayBrief }
+  | { type: 'take'; itemId: string; text: string }
   | { type: 'error'; message: string; code?: string }
   | { type: 'done'; durationMs: number; steps: number; model: string | null }

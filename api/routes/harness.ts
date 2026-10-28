@@ -1,8 +1,8 @@
 import { Hono, type Context } from "hono";
 import { stream } from "hono/streaming";
-import { planRequestSchema, reviewRequestSchema, todayRequestSchema, type HarnessEvent } from "@contracts/harness";
+import { planRequestSchema, reviewRequestSchema, takeRequestSchema, todayRequestSchema, type HarnessEvent } from "@contracts/harness";
 import { aiStatus, resolveAi } from "../ai/provider";
-import { friendly, runPlan, runReview, runToday } from "../harness/engine";
+import { friendly, runPlan, runReview, runTake, runToday } from "../harness/engine";
 import { log } from "../lib/logger";
 
 export const harnessRoutes = new Hono();
@@ -53,4 +53,11 @@ harnessRoutes.post("/today", async (c) => {
   if (!parsed.success) return c.json({ error: "请求格式不正确" }, 400);
   const ai = await resolveAi().catch(() => null);
   return ndjson(c, "today", (emit, signal) => runToday(parsed.data, ai, emit, signal), ai?.modelId ?? null);
+});
+
+harnessRoutes.post("/take", async (c) => {
+  const parsed = takeRequestSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "请求格式不正确" }, 400);
+  const ai = await resolveAi().catch(() => null);
+  return ndjson(c, "take", (emit, signal) => runTake(parsed.data, ai, emit, signal), ai?.modelId ?? null);
 });

@@ -1,4 +1,4 @@
-import { BookOpen, Check, CheckCheck, Clock3, Crosshair, LoaderCircle, MoreHorizontal, Pencil, Pause, Play, RotateCcw, ScanSearch, Trash2 } from 'lucide-react'
+import { BookOpen, Check, CheckCheck, Clock3, Crosshair, LoaderCircle, MoreHorizontal, Pencil, Pause, Play, RefreshCw, RotateCcw, ScanSearch, Trash2 } from 'lucide-react'
 import { REFS } from '@contracts/playbooks'
 import { describeProposal } from '@/lib/apply'
 import { archetypeLabel, scheduleText, verdictLabels } from '@/lib/labels'
@@ -16,6 +16,9 @@ interface Props {
   onApply?: (itemId: string) => void
   onDismiss?: (itemId: string) => void
   judging?: boolean
+  /** 只在「项目」页传：显示大肥鱼的理解 */
+  onTake?: (item: Item) => void
+  taking?: boolean
   focus?: boolean
   compact?: boolean
 }
@@ -23,7 +26,7 @@ interface Props {
 const priorityLabels = { 1: '高优先级', 2: '中优先级', 3: '低优先级' }
 const typeLabels = { once: '一次完成', routine: '周期行动', learning: '学习复习' }
 
-export function ItemRow({ item, checkIns, onCheckIn, onEdit, onTogglePause, onDelete, onJudge, onApply, onDismiss, judging = false, focus = false, compact = false }: Props) {
+export function ItemRow({ item, checkIns, onCheckIn, onEdit, onTogglePause, onDelete, onJudge, onApply, onDismiss, judging = false, onTake, taking = false, focus = false, compact = false }: Props) {
   const status = itemStatus(item)
   const streak = streakFor(item.id, checkIns)
   const Icon = item.completedAt ? CheckCheck : item.type === 'learning' ? BookOpen : item.type === 'once' ? Check : RotateCcw
@@ -69,6 +72,11 @@ export function ItemRow({ item, checkIns, onCheckIn, onEdit, onTogglePause, onDe
             {onDismiss && <button className="text-button muted" onClick={() => onDismiss(item.id)} aria-label="忽略提议">忽略</button>}
           </span>}
         </div>}
+
+        {onTake && !compact && !item.completedAt && <section className="item-take" aria-label={`大肥鱼对${item.name}的理解`}>
+          <h4><span>🐟 大肥鱼的理解</span><button className="text-button" onClick={() => onTake(item)} disabled={taking}>{taking ? <LoaderCircle className="spin" size={13} /> : <RefreshCw size={13} />}{taking ? '想一想' : item.take ? '更新一下' : '听听看'}</button></h4>
+          {item.take ? <p>{item.take.text}</p> : <p className="item-take-empty">还没说过这件事。</p>}
+        </section>}
 
         {!compact && !item.plan && item.analysis && <section className="item-analysis" aria-label={`${item.name}的 AI 任务分析`}>
           <h4>AI 任务分析 <span>建议可按实际情况调整</span></h4>

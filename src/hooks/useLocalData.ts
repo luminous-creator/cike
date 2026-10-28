@@ -47,6 +47,7 @@ export function parseData(value: unknown): AppData {
       deadline: typeof raw.deadline === 'string' && DAY.test(raw.deadline) ? raw.deadline : undefined,
       plan: looseObject<Item['plan']>(raw.plan, ['method', 'steps', 'archetype']),
       judgement: looseObject<Item['judgement']>(raw.judgement, ['verdict', 'summary', 'evidence']),
+      take: typeof raw.take?.text === 'string' && typeof raw.take.generatedAt === 'string' ? { text: raw.take.text.slice(0, 400), generatedAt: raw.take.generatedAt } : undefined,
       priority: raw.priority,
       intervalDays: Math.max(1, Math.min(365, Math.round(intervalDays))),
       currentInterval: Math.max(1, Math.min(365, Math.round(currentInterval))),

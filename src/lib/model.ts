@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { temperatureFor } from '@contracts/ai'
 import type { AiBackend, Effort } from '../../api/ai/provider'
 
 // 设备直连：密钥只存在这台设备的浏览器里，模型请求从设备直接发给服务商（服务商需放行浏览器跨域）。
@@ -71,6 +72,7 @@ export function buildBackend(config: ModelConfig): AiBackend {
     model: provider(config.model),
     options: (effort) => (sendsEffort ? { cike: { reasoningEffort: effort } } : undefined),
     defaultEffort: config.effort ?? 'low',
+    temperature: temperatureFor(isDeepSeek),
   }
 }
 
