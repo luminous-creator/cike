@@ -399,3 +399,4 @@
   .mobile-nav button span { font-size: 10px; }
 }
 .settings-section:has(.horizon-settings) { flex-direction: column; align-items: stretch; gap: 18px; }
+.week-draft .week-over { color: var(--amber-700); }

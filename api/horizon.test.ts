@@ -74,6 +74,20 @@ describe('30 / 7 / 1 天检查点', () => {
     expect(row.checkpoints.map((c) => c.state)).toEqual(['skipped', 'due', 'future'])
   })
 
+  it('学习项的截止日叫“考试”：大物 11/7 期中，11/1 补 7 天的规划，11/6 提醒前一天', () => {
+    const items = [item({ id: 'phy', name: '大物学习', deadline: '2026-11-07', dueDate: '2026-10-28' })]
+    const task = buildHorizon(input('2026-11-01', { items })).today.find((t) => t.event?.source === 'deadline')
+    expect(task?.title).toBe('大物学习考试')
+    expect(task?.lead).toBe(7)
+    expect(task?.lateDays).toBe(1)
+    expect(buildHorizon(input('2026-11-05', { items, state: markDone(emptyHorizon(), task!, '2026-11-01') })).tomorrow.find((t) => t.event?.source === 'deadline')?.lead).toBe(1)
+  })
+
+  it('已过建议日期还没做的事，晚上也会提醒规划明天', () => {
+    const items = [item({ dueDate: '2026-10-28' })]
+    expect(buildHorizon(input('2026-11-01', { items, nowMinutes: 21 * 60 })).today.some((t) => t.type === 'tomorrow')).toBe(true)
+  })
+
   it('项目的截止日自动变成要来的事', () => {
     const feed = buildHorizon(input('2026-11-24', { items: [item({ deadline: '2026-12-01', type: 'once', name: '交报告' })] }))
     const task = feed.today.find((t) => t.event?.source === 'deadline')

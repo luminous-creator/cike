@@ -249,7 +249,7 @@ export function collectEvents(input: HorizonInput, days = HORIZON_DAYS): Horizon
     .filter((i) => i.deadline && !i.completedAt && !i.paused && i.deadline >= today && i.deadline <= until)
     .map((i) => {
       const id = `item:${i.id}:${i.deadline}`
-      return { id, name: `${i.name}截止`, date: i.deadline!, kind: i.type === 'learning' ? 'study' : 'work', leads: DEFAULT_LEADS, note: state.notes[id], source: 'deadline', itemId: i.id }
+      return { id, name: `${i.name}${i.type === 'learning' ? '考试' : '截止'}`, date: i.deadline!, kind: i.type === 'learning' ? 'study' : 'work', leads: DEFAULT_LEADS, note: state.notes[id], source: 'deadline', itemId: i.id }
     })
   return [...user, ...fest, ...deadlines]
     .map((e) => ({ ...e, leads: [...new Set(e.leads)].filter((l) => l >= 1).sort((a, b) => b - a) }))
@@ -312,8 +312,9 @@ export function dueWeekTask(input: HorizonInput, day = input.today): PlanTask | 
   return null
 }
 
+/** 到那天要做的事（含已过建议日期、还没做的） */
 function itemsDueOn(items: HorizonItem[], day: string): HorizonItem[] {
-  return items.filter((i) => !i.paused && !i.completedAt && i.dueDate === day)
+  return items.filter((i) => !i.paused && !i.completedAt && i.dueDate <= day)
 }
 
 /** 晚上规划明天：明天有到期的事或要来的事才出现 */
@@ -454,7 +455,8 @@ export function weekDraft(input: HorizonInput, weekStart: string): WeekDraft {
     const next = all.find((e) => e.kind === 'fun' && e.date > weekEnd)
     suggestions.push(next ? `周末还空着；下一个能玩的是${next.name}（${shortDate(next.date)}）` : '周末还空着，给自己安排一件想玩的')
   }
-  if (freeMinutes < input.capacityMinutesPerDay) suggestions.push('周期性的事已经占满大部分时间，这周别再加大块任务')
+  if (committedMinutes > input.capacityMinutesPerDay * 7) suggestions.push('已排的事超出你每天能拿出的时间，先定一两件主线，其余降频或暂停')
+  else if (freeMinutes < input.capacityMinutesPerDay) suggestions.push('已排的事快占满了，这周别再加大块任务')
   return { weekStart, weekEnd, events, deadlines, freeMinutes, committedMinutes, weekendFree, suggestions }
 }
 

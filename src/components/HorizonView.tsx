@@ -138,7 +138,7 @@ export function HorizonView({ feed, weekPlans, onPlan, onNote, onNewEvent, onEdi
               <div key={event.id} className="horizon-row">
                 <time><b>{Number(event.date.slice(8))}</b><small>{weekdayName(event.date)}</small></time>
                 <div className="horizon-main">
-                  <strong>{event.name}<em className={`kind ${event.kind}`}>{kindLabels[event.kind]}</em>{sourceLabels[event.source] && <em>{sourceLabels[event.source]}</em>}</strong>
+                  <strong>{event.name}<em className={`kind ${event.kind}`}>{kindLabels[event.kind]}</em>{sourceLabels[event.source] && <em>{event.source === 'deadline' && event.kind === 'study' ? '考试' : sourceLabels[event.source]}</em>}</strong>
                   <span>还有 {daysLeft} 天</span>
                   <ol className="checkpoints" aria-label="规划检查点">
                     {checkpoints.map((c) => <li key={c.lead} className={c.state} title={`${leadLabel(c.lead)}（${shortDate(c.date)}）`}>{c.state === 'done' && <Check size={11} />}{c.lead === 1 ? '前一天' : `${c.lead} 天`}</li>)}
@@ -231,7 +231,9 @@ export function PlanTaskDialog({ task, noteOnly, input, tomorrowNames, onOpenCha
               {draft.events.map((e) => <li key={e.id}><CalendarDays size={13} />{weekdayName(e.date)} {e.name}</li>)}
               {draft.deadlines.map((e) => <li key={e.id} className="deadline"><CalendarClock size={13} />{weekdayName(e.date)} {shortDate(e.date)} {e.name}</li>)}
             </ul>}
-            <p>周期性的事每周约占 {Math.round(draft.committedMinutes / 60)} 小时，还能空出约 <b>{Math.round(draft.freeMinutes / 60)} 小时</b>。</p>
+            {draft.committedMinutes > input.capacityMinutesPerDay * 7
+              ? <p className="week-over">已排的事每周约需 <b>{Math.round(draft.committedMinutes / 60)} 小时</b>，你设定每天 {Math.round(input.capacityMinutesPerDay / 6) / 10} 小时（每周 {Math.round(input.capacityMinutesPerDay * 7 / 60)} 小时），多出约 {Math.round((draft.committedMinutes - input.capacityMinutesPerDay * 7) / 60)} 小时。这周挑主线时，想想哪些先放一放。</p>
+              : <p>已排的事每周约占 {Math.round(draft.committedMinutes / 60)} 小时，还能空出约 <b>{Math.round(draft.freeMinutes / 60)} 小时</b>。</p>}
             {draft.suggestions.length > 0 && <ul className="week-suggest">{draft.suggestions.map((s) => <li key={s}>{s}</li>)}</ul>}
           </div>}
 

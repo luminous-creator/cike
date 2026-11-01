@@ -90,7 +90,7 @@ export default function App() {
   const feed = useMemo(() => buildHorizon(hInput), [hInput])
   const tomorrowNames = useMemo(() => {
     const tomorrow = addDays(localDate(), 1)
-    return data.items.filter((item) => !item.paused && !item.completedAt && item.dueDate === tomorrow).map((item) => item.name)
+    return data.items.filter((item) => !item.paused && !item.completedAt && item.dueDate <= tomorrow).map((item) => item.name)
   }, [data.items])
 
   useEffect(() => {
