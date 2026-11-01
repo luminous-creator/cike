@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Bell, BellOff, BookMarked, Download, HardDrive, Plus, Search, Sparkles, Timer, Upload } from 'lucide-react'
+import { Bell, BellOff, BookMarked, CalendarRange, Download, HardDrive, Plus, Search, Sparkles, Timer, Upload } from 'lucide-react'
+import { weekdayName, type HorizonSettings } from '@contracts/horizon'
 import { PLAYBOOKS, REFS, ARCHETYPES } from '@contracts/playbooks'
 import type { AiStatus } from '@/lib/harness'
 import { ItemRow } from '@/components/ItemRow'
@@ -94,6 +95,8 @@ export function HistoryView({ data }: { data: AppData }) {
 }
 
 interface SettingsProps {
+  horizon: HorizonSettings
+  onHorizon: (patch: Partial<HorizonSettings>) => void
   notificationState: string
   capacity: number
   ai: AiStatus | null
@@ -105,7 +108,7 @@ interface SettingsProps {
   onReset: () => void
 }
 
-export function SettingsView({ notificationState, capacity, ai, onCapacity, onToggleNotifications, onExport, onImport, onInstall, onReset }: SettingsProps) {
+export function SettingsView({ horizon, onHorizon, notificationState, capacity, ai, onCapacity, onToggleNotifications, onExport, onImport, onInstall, onReset }: SettingsProps) {
   return (
     <div className="view settings-view">
       <header className="view-heading standard-heading"><div><p className="section-code">SETTINGS / 偏好与数据</p><h1>让工具适应你</h1></div></header>
@@ -114,9 +117,18 @@ export function SettingsView({ notificationState, capacity, ai, onCapacity, onTo
         <label className="capacity-field"><input type="number" min={15} max={960} step={15} value={capacity} onChange={(e) => onCapacity(Number(e.target.value))} aria-label="每天可支配分钟" /><span>分钟 / 天</span></label>
       </section>
       <ModelSettings ai={ai} />
+      <section className="settings-section vertical">
+        <div className="settings-copy"><CalendarRange size={21} /><div><h2>提前规划</h2><p>每周哪天规划下一周；每天几点提醒“今天可以规划什么”；晚上几点提醒规划明天。</p></div></div>
+        <div className="horizon-settings">
+          <label>每周规划日<select value={horizon.weekPlanDay} onChange={(e) => onHorizon({ weekPlanDay: Number(e.target.value) })}>{[0, 1, 2, 3, 4, 5, 6].map((d) => <option key={d} value={d}>{weekdayName(d)}</option>)}</select></label>
+          <label>每天提醒<input type="time" value={horizon.reminderTime} onChange={(e) => e.target.value && onHorizon({ reminderTime: e.target.value })} /></label>
+          <label>规划明天<input type="time" value={horizon.eveningTime} onChange={(e) => e.target.value && onHorizon({ eveningTime: e.target.value })} /></label>
+          <label className="horizon-toggle"><input type="checkbox" checked={horizon.festivals} onChange={(e) => onHorizon({ festivals: e.target.checked })} />提醒节日和长假</label>
+        </div>
+      </section>
       <section className="settings-section">
-        <div className="settings-copy"><Bell size={21} /><div><h2>到点提醒</h2><p>应用开着时，到了固定时段会弹通知；重新打开时补看遗漏项目。</p></div></div>
-        <button className="button-secondary" onClick={onToggleNotifications}>{notificationState === 'granted' ? <BellOff size={17} /> : <Bell size={17} />}{notificationState === 'granted' ? '通知已开启' : '开启浏览器通知'}</button>
+        <div className="settings-copy"><Bell size={21} /><div><h2>通知</h2><p>开启后，每天到点提醒今天可以规划什么、先做哪件，晚上提醒规划明天，固定时段到了也会提醒。安卓装到桌面后，应用关着也能提醒（时间由系统决定）；想要准点，到「规划」页导出到手机日历。</p></div></div>
+        <button className="button-secondary" onClick={onToggleNotifications}>{notificationState === 'granted' ? <BellOff size={17} /> : <Bell size={17} />}{notificationState === 'granted' ? '通知已开启' : '开启通知'}</button>
       </section>
       <section className="settings-section">
         <div className="settings-copy"><Download size={21} /><div><h2>安装到桌面</h2><p>像普通应用一样打开，支持离线查看与本地打卡。</p></div></div>

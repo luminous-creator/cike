@@ -199,7 +199,7 @@
 .methods-grid li a { margin-left: 6px; font-family: inherit; font-size: 11px; color: var(--ink-muted); white-space: nowrap; }
 
 @media (max-width: 899px) {
-  .mobile-nav { grid-template-columns: repeat(5, 1fr); }
+  .mobile-nav { grid-template-columns: repeat(6, 1fr); }
 }
 @media (max-width: 600px) {
   .planner-input textarea { font-size: 17px; }
@@ -302,3 +302,100 @@
 .item-take .item-take-empty { color: var(--ink-muted); font-size: 12px; }
 .later-row .text-button { min-height: 32px; font-size: 12px; color: var(--accent); }
 .later-row .text-button svg { color: currentColor; }
+
+/* 往前看：今天 / 明天可以规划 */
+.plan-ahead h2 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.plan-ahead h2 span { font: 500 10.5px/1 var(--mono); letter-spacing: 0.06em; color: var(--ink-muted); }
+.plan-row { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 13px 4px; border-bottom: 1px solid var(--line-soft); }
+.plan-row > div { min-width: 0; }
+.plan-row strong { display: block; font-size: 16px; }
+.plan-row span:not(.plan-badge) { display: block; font-size: 12px; line-height: 1.6; color: var(--ink-secondary); }
+.plan-row .button-secondary { min-height: 40px; padding: 0 14px; white-space: nowrap; }
+.plan-badge { display: grid; place-items: center; height: 28px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); font: 500 11px/1 var(--mono); }
+.plan-badge.week { background: var(--ink); color: var(--button-fg); }
+.plan-badge.tomorrow { background: var(--amber-100); color: var(--amber-700); }
+.plan-row.late .plan-badge { background: var(--amber-100); color: var(--amber-700); }
+.plan-none { margin: 0; padding: 14px 4px; font-size: 13px; color: var(--ink-muted); }
+.plan-tomorrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; padding-top: 12px; }
+.plan-tomorrow > span { font-size: 12px; font-weight: 700; color: var(--ink-secondary); }
+.plan-tomorrow ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+.plan-tomorrow li { display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 3px; font-size: 13px; }
+.plan-tomorrow li small { font-size: 11px; color: var(--ink-muted); }
+.today-view .plan-ahead { margin: 0 0 30px; }
+.horizon-notes { display: grid; gap: 6px; margin: -12px 0 24px; }
+.horizon-notes p { margin: 0; display: flex; align-items: flex-start; gap: 8px; padding: 9px 12px; border-radius: 3px; background: var(--accent-soft); font-size: 13.5px; line-height: 1.6; }
+.horizon-notes svg { flex: none; margin-top: 3px; color: var(--accent); }
+
+/* 规划页 */
+.horizon-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.horizon-actions button { min-height: 46px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.horizon-view > .plan-ahead { margin-top: 0; }
+.week-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding-top: 14px; }
+.week-card { padding: 16px 18px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 3px; display: grid; gap: 8px; align-content: start; }
+.week-card.empty { background: transparent; border-style: dashed; }
+.week-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.week-card header strong { font-size: 16px; }
+.week-card header span { font: 12px var(--mono); color: var(--ink-muted); }
+.week-card dl { margin: 0; display: grid; gap: 6px; }
+.week-card dl div { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px; font-size: 13.5px; }
+.week-card dt { font-size: 12px; font-weight: 700; color: var(--accent); }
+.week-card dd { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+.week-card p { margin: 0; font-size: 13px; color: var(--ink-muted); }
+.week-card .text-button { justify-self: start; color: var(--accent); }
+.horizon-month h3 { margin: 18px 0 0; font: 500 12px/1 var(--mono); letter-spacing: 0.08em; color: var(--ink-muted); }
+.horizon-row { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 14px 4px; border-bottom: 1px solid var(--line-soft); }
+.horizon-row time { display: grid; justify-items: center; line-height: 1.1; }
+.horizon-row time b { font: 500 22px/1.1 var(--mono); font-variant-numeric: tabular-nums; }
+.horizon-row time small { font-size: 11px; color: var(--ink-muted); }
+.horizon-main { min-width: 0; display: grid; gap: 4px; }
+.horizon-main strong { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 15.5px; }
+.horizon-main strong em { font-style: normal; font-size: 10.5px; font-weight: 600; padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--ink-secondary); }
+.horizon-main strong em.kind.fun { border-color: var(--amber-700); color: var(--amber-700); }
+.horizon-main strong em.kind.study, .horizon-main strong em.kind.work { border-color: var(--accent); color: var(--accent); }
+.horizon-main > span { font-size: 12px; color: var(--ink-secondary); }
+.checkpoints { margin: 2px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.checkpoints li { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 3px; font: 500 11px/1.5 var(--mono); border: 1px solid var(--line); color: var(--ink-muted); }
+.checkpoints li.done { background: var(--accent); border-color: var(--accent); color: var(--button-fg); }
+.checkpoints li.due { border-color: var(--ink); color: var(--ink); background: var(--accent-soft); }
+.checkpoints li.skipped { text-decoration: line-through; opacity: 0.6; }
+.horizon-note { margin: 2px 0 0; font-size: 13px; color: var(--ink); white-space: pre-line; overflow-wrap: anywhere; }
+.horizon-row-actions { display: flex; align-items: center; gap: 2px; }
+.horizon-row-actions .text-button { min-height: 32px; }
+.horizon-help { margin-top: 40px; }
+.horizon-help p + p { margin-top: 8px; }
+
+/* 规划对话框 */
+.plan-hint b { margin-right: 10px; font: var(--label); color: var(--accent); }
+.week-draft { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 3px; font-size: 13px; }
+.week-draft ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.week-draft li { display: flex; align-items: center; gap: 6px; }
+.week-draft li.deadline { color: var(--amber-700); }
+.week-draft p { margin: 0; color: var(--ink-secondary); }
+.week-draft .week-suggest { padding-top: 8px; border-top: 1px dashed var(--line); }
+.week-draft .week-suggest li { display: list-item; margin-left: 16px; list-style: disc; color: var(--ink-secondary); }
+.dialog-actions .dialog-left { margin-right: auto; }
+.segmented.four-options { grid-template-columns: repeat(4, 1fr); }
+.lead-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.lead-choices button { min-height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--page); font-size: 13px; color: var(--ink-secondary); }
+.lead-choices button.selected { border-color: var(--ink); background: var(--ink); color: var(--button-fg); }
+
+/* 设置：提前规划 */
+.horizon-settings { display: flex; flex-wrap: wrap; gap: 14px 20px; padding-left: 37px; }
+.horizon-settings label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-secondary); }
+.horizon-settings select, .horizon-settings input[type='time'] { min-height: 44px; min-width: 120px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); padding: 0 10px; font: 500 15px/1 var(--mono); color: var(--ink); }
+.horizon-settings select { font-family: inherit; }
+.horizon-toggle { display: flex !important; align-items: center; gap: 8px !important; align-self: end; min-height: 44px; font-size: 13px !important; }
+.horizon-toggle input { width: 18px; height: 18px; }
+
+@media (max-width: 760px) { .horizon-settings { padding-left: 0; } }
+@media (max-width: 600px) {
+  .plan-row { grid-template-columns: 40px minmax(0, 1fr); }
+  .plan-row .button-secondary { grid-column: 2; justify-self: start; }
+  .week-cards { grid-template-columns: 1fr; }
+  .horizon-row { grid-template-columns: 40px minmax(0, 1fr); }
+  .horizon-row-actions { grid-column: 2; }
+  .horizon-actions { width: 100%; }
+  .horizon-actions button { flex: 1; justify-content: center; }
+  .mobile-nav button span { font-size: 10px; }
+}
+.settings-section:has(.horizon-settings) { flex-direction: column; align-items: stretch; gap: 18px; }

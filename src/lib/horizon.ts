@@ -115,7 +115,9 @@ export function downloadIcs(data: AppData): void {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `此刻规划提醒-${localDate()}.ics`
+  anchor.download = `cike-plan-${localDate()}.ics`
+  document.body.appendChild(anchor)
   anchor.click()
+  anchor.remove()
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }

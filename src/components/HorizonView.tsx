@@ -113,10 +113,11 @@ export function HorizonView({ feed, weekPlans, onPlan, onNote, onNewEvent, onEdi
       <section className="today-block">
         <h2>每周规划</h2>
         <div className="week-cards">
-          {[thisWeek, nextWeek].map((ws) => {
+          {/* 周日这周只剩今天，改看下周和下下周 */}
+          {(weekdayName(feed.date) === '周日' ? [nextWeek, shiftDay(nextWeek, 7)] : [thisWeek, nextWeek]).map((ws) => {
             const plan = weekPlans[ws]
             return <article key={ws} className={plan ? 'week-card' : 'week-card empty'}>
-              <header><strong>{ws === thisWeek ? '本周' : '下周'}</strong><span>{shortDate(ws)}–{shortDate(shiftDay(ws, 6))}</span></header>
+              <header><strong>{ws === thisWeek ? '本周' : ws === nextWeek ? '下周' : '下下周'}</strong><span>{shortDate(ws)}–{shortDate(shiftDay(ws, 6))}</span></header>
               {plan ? <dl>
                 <div><dt>主线</dt><dd>{plan.focus || '—'}</dd></div>
                 <div><dt>想玩</dt><dd>{plan.fun || '—'}</dd></div>
