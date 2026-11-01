@@ -80,6 +80,8 @@ export interface AppData {
   todayBrief?: TodayBrief
   /** 往前看：要来的事、每周规划、前一晚的安排 */
   horizon?: HorizonState
+  /** 删除过的项目 / 事件 id：同步合并时用来剔除，避免删了又回来 */
+  deleted?: string[]
 }
 
 export type View = 'chat' | 'today' | 'horizon' | 'items' | 'review' | 'history' | 'settings'

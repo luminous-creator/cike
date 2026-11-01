@@ -13,6 +13,7 @@ import type { ChatAction } from '@contracts/chat'
 import { buildDigests, buildHorizon, dayTaskKey, emptyHorizon, markDone, shiftDay, type HorizonEvent, type HorizonSettings, type HorizonState, type PlanTask } from '@contracts/horizon'
 import { downloadIcs, horizonInput, horizonSettings, markShown, notify, nowHHMM, registerBackgroundReminders, syncDigests, wasShown } from '@/lib/horizon'
 import { useLocalData } from '@/hooks/useLocalData'
+import { useSync } from '@/lib/sync'
 import { applyProposal } from '@/lib/apply'
 import { buildSnapshot, firstActionsOf, requestReview, requestTake, requestToday, useAiStatus } from '@/lib/harness'
 import { allPicks, buildBrief, type TodayBrief } from '@contracts/today'
@@ -36,6 +37,7 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
 
 export default function App() {
   const { data, setData, exportData, importData } = useLocalData()
+  const sync = useSync(data, setData)
   const [view, setView] = useState<View>('chat')
   const [itemDialog, setItemDialog] = useState(false)
   const [editingItem, setEditingItem] = useState<Item | null>(null)
@@ -194,6 +196,7 @@ export default function App() {
 
   function deleteEvent(event: HorizonEvent) {
     if (!window.confirm(`删除「${event.name}」吗？`)) return
+    setData((current) => ({ ...current, deleted: [...(current.deleted ?? []), event.id].slice(-2000) }))
     updateHorizon((h) => ({ ...h, events: h.events.filter((e) => e.id !== event.id) }))
     showToast('已删除')
   }
@@ -385,7 +388,7 @@ export default function App() {
 
   function deleteItem(item: Item) {
     if (!window.confirm(`确定删除“${item.name}”及其打卡记录吗？`)) return
-    setData((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id), checkIns: current.checkIns.filter((entry) => entry.itemId !== item.id) }))
+    setData((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id), checkIns: current.checkIns.filter((entry) => entry.itemId !== item.id), deleted: [...(current.deleted ?? []), item.id].slice(-2000) }))
     showToast('项目已删除')
   }
 
@@ -436,7 +439,9 @@ export default function App() {
           <div><span>近 7 天打卡</span><strong>{String(weekCount).padStart(2, '0')}</strong></div>
         </div>
         <button className="sidebar-add" onClick={openNew}><Plus size={19} />新建项目</button>
-        <div className="local-status"><span /><div>本地自动保存<small>数据仅在这台设备</small></div></div>
+        <div className={`local-status${sync.state.enabled ? ` sync-${sync.state.phase}` : ''}`}><span />{sync.state.enabled
+          ? <div>{sync.state.phase === 'error' ? '同步出错' : '已同步到服务端'}<small>{sync.state.phase === 'error' ? sync.state.message : sync.state.lastSyncAt ? `上次 ${new Date(sync.state.lastSyncAt).toTimeString().slice(0, 5)} · 服务端自动留快照` : '正在连接'}</small></div>
+          : <div>本地自动保存<small>数据仅在这台设备</small></div>}</div>
       </aside>
 
       <header className="mobile-header"><div className="mobile-brand"><span>＋＋</span><strong>此刻</strong></div><button className="icon-button" onClick={openNew} aria-label="新建项目"><Plus size={21} /></button></header>
@@ -448,7 +453,7 @@ export default function App() {
         {view === 'items' && <ItemsView data={data} canTake={Boolean(ai?.configured)} onTake={(item) => void takeItem(item)} takingId={takingId} onCheckIn={requestCheckIn} onNew={openNew} onEdit={(item) => { setDraft(null); setEditingItem(item); setItemDialog(true) }} onTogglePause={togglePause} onDelete={deleteItem} {...judgeProps} />}
         {view === 'review' && <ReviewView data={data} ai={ai} onSave={saveReview} onApply={applyJudgement} onDismiss={dismissJudgement} onCheckIn={requestCheckIn} />}
         {view === 'history' && <HistoryView data={data} />}
-        {view === 'settings' && <SettingsView horizon={horizonSettings(data.settings)} onHorizon={setHorizonSettings} notificationState={notificationState} capacity={data.settings.capacityMinutesPerDay} ai={ai} onCapacity={setCapacity} onToggleNotifications={toggleNotifications} onExport={exportData} onImport={handleImport} onInstall={installApp} onReset={resetData} />}
+        {view === 'settings' && <SettingsView sync={sync.state} onSyncEnable={(on) => void sync.enable(on)} onSyncToken={sync.setToken} onSyncNow={() => void sync.syncNow()} horizon={horizonSettings(data.settings)} onHorizon={setHorizonSettings} notificationState={notificationState} capacity={data.settings.capacityMinutesPerDay} ai={ai} onCapacity={setCapacity} onToggleNotifications={toggleNotifications} onExport={exportData} onImport={handleImport} onInstall={installApp} onReset={resetData} />}
       </main>
 
       <nav className="mobile-nav" aria-label="移动端主导航">{navItems.map((entry) => <button key={entry.id} className={view === entry.id || (view === 'today' && entry.id === 'chat') ? 'active' : ''} onClick={() => setView(entry.id)}><entry.icon size={20} /><span>{entry.label}</span>{entry.id === 'chat' && dueCount > 0 && <b>{dueCount}</b>}</button>)}</nav>

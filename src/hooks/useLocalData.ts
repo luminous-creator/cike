@@ -123,6 +123,7 @@ export function parseData(value: unknown): AppData {
     checkIns,
     settings: parseSettings(parsed.settings),
     horizon: parseHorizon((parsed as { horizon?: unknown }).horizon),
+    deleted: (() => { const raw = (parsed as { deleted?: unknown }).deleted; const ids = Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string').slice(-2000) : []; return ids.length ? ids : undefined })(),
     review: looseObject<AppData['review']>(parsed.review, ['judgements', 'balance', 'generatedAt']),
     todayBrief: looseObject<AppData['todayBrief']>((parsed as { todayBrief?: unknown }).todayBrief, ['date', 'now', 'also', 'laterToday', 'tomorrow']),
   }

@@ -6,6 +6,8 @@ import type { AiStatus } from '@/lib/harness'
 import { ItemRow } from '@/components/ItemRow'
 import { ModelSettings } from '@/components/ModelSettings'
 import { PromptSettings } from '@/components/PromptSettings'
+import { SyncSettings } from '@/components/SyncSettings'
+import type { SyncState } from '@/lib/sync'
 import { localDate, recommendedItems } from '@/lib/scheduler'
 import type { AppData, Item } from '@/types'
 
@@ -96,6 +98,10 @@ export function HistoryView({ data }: { data: AppData }) {
 }
 
 interface SettingsProps {
+  sync: SyncState
+  onSyncEnable: (on: boolean) => void
+  onSyncToken: (token: string) => void
+  onSyncNow: () => void
   horizon: HorizonSettings
   onHorizon: (patch: Partial<HorizonSettings>) => void
   notificationState: string
@@ -109,7 +115,7 @@ interface SettingsProps {
   onReset: () => void
 }
 
-export function SettingsView({ horizon, onHorizon, notificationState, capacity, ai, onCapacity, onToggleNotifications, onExport, onImport, onInstall, onReset }: SettingsProps) {
+export function SettingsView({ sync, onSyncEnable, onSyncToken, onSyncNow, horizon, onHorizon, notificationState, capacity, ai, onCapacity, onToggleNotifications, onExport, onImport, onInstall, onReset }: SettingsProps) {
   return (
     <div className="view settings-view">
       <header className="view-heading standard-heading"><div><p className="section-code">SETTINGS / 偏好与数据</p><h1>让工具适应你</h1></div></header>
@@ -136,6 +142,7 @@ export function SettingsView({ horizon, onHorizon, notificationState, capacity, 
         <div className="settings-copy"><Download size={21} /><div><h2>安装到桌面</h2><p>像普通应用一样打开，支持离线查看与本地打卡。</p></div></div>
         <button className="button-secondary" onClick={onInstall}>安装 / 查看方法</button>
       </section>
+      <SyncSettings state={sync} onEnable={onSyncEnable} onToken={onSyncToken} onSyncNow={onSyncNow} />
       <section className="settings-section vertical">
         <div className="settings-copy"><HardDrive size={21} /><div><h2>本地数据与备份</h2><p>数据只保存在当前浏览器。清除浏览器数据前，请先导出备份。</p></div></div>
         <div className="backup-actions"><button className="button-secondary" onClick={onExport}><Download size={17} />导出备份</button><label className="button-secondary file-button"><Upload size={17} />导入备份<input type="file" accept="application/json,.json" onChange={(e) => { const file = e.target.files?.[0]; if (file) onImport(file); e.target.value = '' }} /></label></div>

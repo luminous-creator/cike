@@ -481,3 +481,16 @@
   .chat-day:last-of-type { scroll-margin-top: 78px; }
   .in-chat .toast { top: calc(76px + env(safe-area-inset-top)); bottom: auto; }
 }
+
+/* 同步 */
+.sync-settings { flex-direction: column; align-items: stretch !important; gap: 14px; }
+.sync-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.sync-token { min-width: 220px; flex: 1; max-width: 360px; }
+.sync-toggle { align-self: flex-start; }
+.sync-status { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 20px; }
+.sync-status div { display: grid; gap: 2px; min-width: 0; }
+.sync-status dt { font-size: 11px; font-weight: 700; color: var(--ink-muted); }
+.sync-status dd { margin: 0; font-size: 13.5px; overflow-wrap: anywhere; }
+.sync-status dd.ok { color: var(--accent); }
+.sync-status dd.error { color: var(--red-700); }
+.local-status.sync-error span { background: var(--red-700); }

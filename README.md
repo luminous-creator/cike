@@ -12,6 +12,20 @@
 - 「让 AI 排一下」：规则先算出候选，模型只在候选里挑顺序、写理由和第一步，被校验器检查后才显示，当天有效。
 - 去掉了 v0.2 打开就弹出的逾期确认框。
 
+## 聊天：大肥鱼
+
+打开应用的第一个界面是和「大肥鱼」聊天。每天的第一条是今天的卡片（现在做这件 + 今天可以规划），其余用说的：
+
+- “下个月 5 号想和朋友去海边” → 它提议加一件要来的事，你点「采用」才会加；
+- “规划一下下周” → 它看周草稿（节日、截止、已排时长），问你主线和想玩的，再提议保存；
+- “大物做完了” → 提议打卡，学习类会先问回忆得怎么样。
+
+它的设定是一段 **JSON 结构化系统提示词**：默认值在 `prompts/chat.json`（persona / rules / intents / style），设置里可以直接改（只存在这台设备），可以随意加字段，比如你的作息和偏好。模型读两段 JSON（设定 + 你此刻的数据），改数据只能调用 7 个 `propose_*` 工具，每次调用先过校验，不合格退回让它改。聊天必须接入模型：设置里填（设备直连），或服务端 `.env` 里填。
+
+## 手机当服务器：同步与自动备份
+
+在安卓手机的 Termux 里跑「此刻」的服务端，从 `http://localhost:3000` 打开应用并开启同步：每次改动存到手机上，服务端自动留快照（2 天内全留，之后每天一份，保留 90 天），别的设备连上来也能同步。见 [docs/手机当服务器.md](docs/手机当服务器.md)，一步安装：`scripts/termux-setup.sh`。
+
 ## 规划页：往前看
 
 起因：万圣节当天才发现自己没想过出去玩。今天页回答“现在做什么”，规划页回答“今天该为哪些未来的事做规划”。
@@ -33,7 +47,7 @@
 ```bash
 npm install
 npm run dev        # 开发：http://localhost:3000
-npm test           # 39 个测试
+npm test           # 54 个测试
 npm run build      # 生产构建
 npm start          # 运行 dist/boot.js（PORT 可改端口）
 ```
@@ -83,12 +97,14 @@ npm start          # 运行 dist/boot.js（PORT 可改端口）
 - `api/harness/engine.ts`：模型工具循环（提交即校验、退回修正、动态收束）
 - `api/harness/prompts.ts`：路由器、专家、复盘评审的提示词
 - `contracts/today.ts`：今天页的规则排序（固定时段、逾期、截止、投入不足、复习到期）与模型输出校验
+- `prompts/chat.json`、`contracts/chat.ts`、`api/chat/engine.ts`：聊天的结构化提示词、数据与校验、工具循环
+- `api/sync/store.ts`、`api/routes/sync.ts`、`src/lib/sync.ts`：同步、快照与合并
 - `api/routes/harness.ts`：`POST /api/plan`、`POST /api/review`、`POST /api/today`（NDJSON 流）、`GET /api/ai/status`
 - `src/components/PlannerDialog.tsx`、`ReviewView.tsx`、`HarnessTrace.tsx`：前端
 
 ## 数据
 
-数据保存在浏览器的 localStorage 里（键名 `cike.personal.v1`，数据版本 3，能导入 v1 和 v2 的备份）。只有点击「开始规划 / 开始复盘 / 评判」时，任务和打卡摘要才会由服务端发给模型，服务端不保存。
+数据保存在浏览器的 localStorage 里（键名 `cike.personal.v1`，数据版本 3，能导入 v1 和 v2 的备份）；开启同步后，同时存到你自己的服务端并自动留快照。规划、复盘、评判、聊天时，任务和打卡摘要会发给你接入的模型，模型那边不保存。
 
 ## 技术栈
 
