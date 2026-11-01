@@ -17,7 +17,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       filename: 'cike-offline.js',
-      includeAssets: ['icon-192.png', 'icon-512.png'],
+      includeAssets: ['icon-192.png', 'icon-512.png', 'cike-sw-extra.js'],
       manifest: {
         name: '此刻 · 个人行动与复习',
         short_name: '此刻',
@@ -34,7 +34,8 @@ export default defineConfig({
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: { navigateFallback: 'index.html' },
+      // 后台提醒：定时唤醒时读每日摘要并弹通知，点通知回到应用
+      workbox: { navigateFallback: 'index.html', importScripts: ['cike-sw-extra.js'] },
     }),
   ],
   server: {

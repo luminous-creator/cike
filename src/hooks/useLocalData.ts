@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ARCHETYPES } from '@contracts/playbooks'
-import type { AppData, Item, Rating } from '@/types'
+import { DEFAULT_HORIZON_SETTINGS, HORIZON_KINDS, emptyHorizon, type HorizonEvent, type HorizonState, type WeekPlan } from '@contracts/horizon'
+import type { AppData, Item, Rating, Settings } from '@/types'
 
 const STORAGE_KEY = 'cike.personal.v1'
 export const DEFAULT_SETTINGS = { capacityMinutesPerDay: 180 }
@@ -19,9 +20,52 @@ const positiveInt = (value: unknown, max: number) => typeof value === 'number' &
 const looseObject = <T>(value: unknown, keys: string[]): T | undefined =>
   value && typeof value === 'object' && keys.every((key) => key in (value as object)) ? value as T : undefined
 
+const str = (value: unknown, max: number) => typeof value === 'string' ? value.slice(0, max) : undefined
+const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+
+/** 往前看的数据：逐条宽松检查，坏的丢掉，不影响其余 */
+export function parseHorizon(value: unknown): HorizonState | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  const horizon = emptyHorizon()
+  for (const entry of Array.isArray(raw.events) ? raw.events : []) {
+    const e = record(entry)
+    const leads = Array.isArray(e.leads) ? [...new Set(e.leads.filter((l): l is number => Number.isInteger(l) && l >= 1 && l <= 365))].sort((a, b) => b - a) : []
+    if (typeof e.id !== 'string' || typeof e.name !== 'string' || !e.name.trim() || typeof e.date !== 'string' || !DAY.test(e.date) || !leads.length) continue
+    horizon.events.push({
+      id: e.id, name: e.name.slice(0, 60), date: e.date, leads, source: 'user',
+      kind: HORIZON_KINDS.includes(e.kind as HorizonEvent['kind']) ? e.kind as HorizonEvent['kind'] : 'life',
+      note: str(e.note, 800),
+    })
+  }
+  for (const [key, day] of Object.entries(record(raw.done))) if (typeof day === 'string' && DAY.test(day)) horizon.done[key] = day
+  horizon.dismissed = Array.isArray(raw.dismissed) ? raw.dismissed.filter((id): id is string => typeof id === 'string') : []
+  for (const [key, note] of Object.entries(record(raw.notes))) if (typeof note === 'string') horizon.notes[key] = note.slice(0, 800)
+  for (const [key, note] of Object.entries(record(raw.dayNotes))) if (DAY.test(key) && typeof note === 'string') horizon.dayNotes[key] = note.slice(0, 800)
+  for (const [key, entry] of Object.entries(record(raw.weekPlans))) {
+    const w = record(entry)
+    if (!DAY.test(key)) continue
+    horizon.weekPlans[key] = { weekStart: key, focus: str(w.focus, 800) ?? '', fun: str(w.fun, 800) ?? '', savedAt: str(w.savedAt, 40) ?? '' } satisfies WeekPlan
+  }
+  return horizon
+}
+
+function parseSettings(value: unknown): Settings {
+  const raw = record(value)
+  const capacity = positiveInt(raw.capacityMinutesPerDay, 960)
+  const day = Number(raw.weekPlanDay)
+  return {
+    capacityMinutesPerDay: capacity && capacity >= 15 ? capacity : DEFAULT_SETTINGS.capacityMinutesPerDay,
+    weekPlanDay: Number.isInteger(day) && day >= 0 && day <= 6 ? day : DEFAULT_HORIZON_SETTINGS.weekPlanDay,
+    reminderTime: typeof raw.reminderTime === 'string' && HHMM.test(raw.reminderTime) ? raw.reminderTime : DEFAULT_HORIZON_SETTINGS.reminderTime,
+    eveningTime: typeof raw.eveningTime === 'string' && HHMM.test(raw.eveningTime) ? raw.eveningTime : DEFAULT_HORIZON_SETTINGS.eveningTime,
+    festivals: typeof raw.festivals === 'boolean' ? raw.festivals : DEFAULT_HORIZON_SETTINGS.festivals,
+  }
+}
+
 export function parseData(value: unknown): AppData {
   if (!value || typeof value !== 'object') throw new Error('备份格式不正确')
-  const parsed = value as { version?: unknown; items?: unknown; checkIns?: unknown; settings?: { capacityMinutesPerDay?: unknown }; review?: unknown }
+  const parsed = value as { version?: unknown; items?: unknown; checkIns?: unknown; settings?: unknown; review?: unknown }
   if ((parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) || !Array.isArray(parsed.items) || !Array.isArray(parsed.checkIns)) {
     throw new Error('备份格式不正确')
   }
@@ -73,12 +117,12 @@ export function parseData(value: unknown): AppData {
       rating: raw.rating,
     }
   })
-  const capacity = positiveInt(parsed.settings?.capacityMinutesPerDay, 960)
   return {
     version: 3,
     items,
     checkIns,
-    settings: { capacityMinutesPerDay: capacity && capacity >= 15 ? capacity : DEFAULT_SETTINGS.capacityMinutesPerDay },
+    settings: parseSettings(parsed.settings),
+    horizon: parseHorizon((parsed as { horizon?: unknown }).horizon),
     review: looseObject<AppData['review']>(parsed.review, ['judgements', 'balance', 'generatedAt']),
     todayBrief: looseObject<AppData['todayBrief']>((parsed as { todayBrief?: unknown }).todayBrief, ['date', 'now', 'also', 'laterToday', 'tomorrow']),
   }

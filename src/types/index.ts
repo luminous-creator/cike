@@ -1,6 +1,7 @@
 import type { Judgement, Plan, ReviewResult } from '@contracts/harness'
 import type { Archetype } from '@contracts/playbooks'
 import type { TodayBrief } from '@contracts/today'
+import type { HorizonSettings, HorizonState } from '@contracts/horizon'
 
 export type ItemType = 'once' | 'routine' | 'learning'
 export type Rating = 'forgot' | 'hard' | 'good' | 'easy'
@@ -65,7 +66,7 @@ export interface CheckIn {
   rating?: Rating
 }
 
-export interface Settings {
+export interface Settings extends Partial<HorizonSettings> {
   capacityMinutesPerDay: number
 }
 
@@ -77,6 +78,8 @@ export interface AppData {
   review?: ReviewResult
   /** 当天由模型排过的“现在做哪一件”，跨天自动失效 */
   todayBrief?: TodayBrief
+  /** 往前看：要来的事、每周规划、前一晚的安排 */
+  horizon?: HorizonState
 }
 
-export type View = 'today' | 'items' | 'review' | 'history' | 'settings'
+export type View = 'today' | 'horizon' | 'items' | 'review' | 'history' | 'settings'
