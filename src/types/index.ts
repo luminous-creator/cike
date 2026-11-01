@@ -82,4 +82,4 @@ export interface AppData {
   horizon?: HorizonState
 }
 
-export type View = 'today' | 'horizon' | 'items' | 'review' | 'history' | 'settings'
+export type View = 'chat' | 'today' | 'horizon' | 'items' | 'review' | 'history' | 'settings'

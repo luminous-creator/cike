@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarDays, CalendarRange, CheckSquare2, Clock3, History, Home, Plus, ScanSearch, Settings } from 'lucide-react'
+import { CalendarDays, CalendarRange, CheckSquare2, Clock3, History, Home, MessageCircle, Plus, ScanSearch, Settings } from 'lucide-react'
 import type { ReviewResult } from '@contracts/harness'
 import { ItemDialog } from '@/components/ItemDialog'
 import { CheckInDialog } from '@/components/CheckInDialog'
@@ -7,8 +7,10 @@ import { TodayView } from '@/components/TodayView'
 import { PlannerDialog } from '@/components/PlannerDialog'
 import { ReviewView } from '@/components/ReviewView'
 import { HistoryView, ItemsView, SettingsView } from '@/components/Views'
-import { EventDialog, HorizonView, PlanTaskDialog, type PlanPayload } from '@/components/HorizonView'
-import { buildDigests, buildHorizon, emptyHorizon, markDone, shiftDay, type HorizonEvent, type HorizonSettings, type HorizonState, type PlanTask } from '@contracts/horizon'
+import { EventDialog, HorizonView, PlanTaskDialog, weekTaskFor, type PlanPayload } from '@/components/HorizonView'
+import { ChatView } from '@/components/ChatView'
+import type { ChatAction } from '@contracts/chat'
+import { buildDigests, buildHorizon, dayTaskKey, emptyHorizon, markDone, shiftDay, type HorizonEvent, type HorizonSettings, type HorizonState, type PlanTask } from '@contracts/horizon'
 import { downloadIcs, horizonInput, horizonSettings, markShown, notify, nowHHMM, registerBackgroundReminders, syncDigests, wasShown } from '@/lib/horizon'
 import { useLocalData } from '@/hooks/useLocalData'
 import { applyProposal } from '@/lib/apply'
@@ -24,7 +26,7 @@ interface InstallPrompt extends Event {
 }
 
 const navItems: { id: View; label: string; icon: typeof Home }[] = [
-  { id: 'today', label: '今天', icon: Home },
+  { id: 'chat', label: '聊天', icon: MessageCircle },
   { id: 'horizon', label: '规划', icon: CalendarRange },
   { id: 'items', label: '项目', icon: CheckSquare2 },
   { id: 'review', label: '复盘', icon: ScanSearch },
@@ -34,7 +36,7 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
 
 export default function App() {
   const { data, setData, exportData, importData } = useLocalData()
-  const [view, setView] = useState<View>('today')
+  const [view, setView] = useState<View>('chat')
   const [itemDialog, setItemDialog] = useState(false)
   const [editingItem, setEditingItem] = useState<Item | null>(null)
   const [draft, setDraft] = useState<Partial<Item> | null>(null)
@@ -203,6 +205,44 @@ export default function App() {
 
   function setHorizonSettings(patch: Partial<HorizonSettings>) {
     setData((current) => ({ ...current, settings: { ...current.settings, ...patch } }))
+  }
+
+  /** 聊天里点「采用」：走和按钮一样的路径；失败返回原因 */
+  function applyChatAction(action: ChatAction): string | null {
+    const today = localDate()
+    switch (action.type) {
+      case 'add_event':
+        saveEvent({ ...action.event, id: crypto.randomUUID(), source: 'user' })
+        return null
+      case 'plan_done': {
+        let task = [...feed.today, ...feed.tomorrow].find((t) => t.key === action.key)
+        if (!task) {
+          const match = /^ev:(.+)@(\d+)$/.exec(action.key)
+          const row = match ? feed.upcoming.find((r) => r.event.id === match[1]) : undefined
+          if (!row || !match) { showToast('这次规划已经不在了'); return '不在了' }
+          task = { key: action.key, type: 'event', title: row.event.name, hint: '', date: today, target: row.event.date, daysLeft: row.daysLeft, lateDays: 0, lead: Number(match[2]), kind: row.event.kind, event: row.event }
+        }
+        savePlan(task, { note: action.note }, true)
+        return null
+      }
+      case 'week_plan':
+        savePlan(weekTaskFor(action.weekStart, today), { focus: action.focus, fun: action.fun }, true)
+        return null
+      case 'tomorrow_note':
+        savePlan({ key: dayTaskKey(action.date), type: 'tomorrow', title: '规划明天', hint: '', date: today, target: action.date, daysLeft: 1, lateDays: 0 }, { note: action.note }, true)
+        return null
+      case 'check_in': {
+        if (!data.items.some((i) => i.id === action.itemId)) { showToast('这件事已经不在了'); return '不在了' }
+        saveCheckIn({ id: crypto.randomUUID(), itemId: action.itemId, doneAt: new Date().toISOString(), duration: action.minutes, rating: action.rating, note: action.note })
+        return null
+      }
+      case 'not_today': {
+        const item = data.items.find((i) => i.id === action.itemId)
+        if (!item) { showToast('这件事已经不在了'); return '不在了' }
+        notToday(item)
+        return null
+      }
+    }
   }
 
   function exportIcs() {
@@ -377,19 +417,19 @@ export default function App() {
   function resetData() {
     if (!window.confirm('确定清除所有项目和打卡记录吗？建议先导出备份。')) return
     setData((current) => ({ version: 3, items: [], checkIns: [], settings: current.settings }))
-    setView('today')
+    setView('chat')
     showToast('本地数据已清除')
   }
 
   const judgeProps = { onJudge: judgeItem, onApply: applyJudgement, onDismiss: dismissJudgement, judgingId }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${view === 'chat' ? ' in-chat' : ''}`}>
       <aside className="sidebar">
         <div className="brand"><span className="brand-symbol" aria-hidden="true">＋<br />＋＋</span><div><strong>此刻</strong><small>CIKE / PERSONAL</small></div></div>
         <div className="sidebar-intro"><p>把想做的事放在这里。<br />有空时，不必再从头想起。</p></div>
         <nav className="side-nav" aria-label="主导航">
-          {navItems.map((entry) => <button key={entry.id} className={view === entry.id ? 'active' : ''} onClick={() => setView(entry.id)}><entry.icon size={18} /><span>{entry.label}</span>{entry.id === 'today' && dueCount > 0 && <b>{dueCount}</b>}</button>)}
+          {navItems.map((entry) => <button key={entry.id} className={view === entry.id || (view === 'today' && entry.id === 'chat') ? 'active' : ''} onClick={() => setView(entry.id)}><entry.icon size={18} /><span>{entry.label}</span>{entry.id === 'chat' && dueCount > 0 && <b>{dueCount}</b>}</button>)}
         </nav>
         <div className="sidebar-stats">
           <div><span>今日待做</span><strong>{String(dueCount).padStart(2, '0')}</strong></div>
@@ -402,6 +442,7 @@ export default function App() {
       <header className="mobile-header"><div className="mobile-brand"><span>＋＋</span><strong>此刻</strong></div><button className="icon-button" onClick={openNew} aria-label="新建项目"><Plus size={21} /></button></header>
 
       <main className="main-content">
+        {view === 'chat' && <ChatView data={data} brief={brief} feed={feed} input={hInput} ai={ai} onApply={applyChatAction} onPlan={(task) => setPlanTask({ task })} onDone={(item) => requestCheckIn(item, item.type === 'learning')} onSwap={swapNow} onNotToday={notToday} onOpenToday={() => setView('today')} onOpenHorizon={() => setView('horizon')} onOpenSettings={() => setView('settings')} />}
         {view === 'today' && <TodayView data={data} feed={feed} onPlan={(task) => setPlanTask({ task })} brief={brief} restItems={restItems} ai={ai} arranging={arranging} skippedCount={skipToday.length} onArrange={() => void arrangeToday()} onDone={(item) => requestCheckIn(item, item.type === 'learning')} onCheckIn={requestCheckIn} onSwap={swapNow} onNotToday={notToday} onPull={pullForward} onResetSkip={() => updateSkip([])} onNew={openNew} {...judgeProps} />}
         {view === 'horizon' && <HorizonView feed={feed} weekPlans={data.horizon?.weekPlans ?? {}} onPlan={(task) => setPlanTask({ task })} onNote={(event) => setPlanTask({ task: { key: `note:${event.id}`, type: 'event', title: event.name, hint: '', date: localDate(), target: event.date, daysLeft: feed.upcoming.find((r) => r.event.id === event.id)?.daysLeft ?? 0, lateDays: 0, kind: event.kind, event }, noteOnly: true })} onNewEvent={() => { setEditingEvent(null); setEventDialog(true) }} onEditEvent={(event) => { setEditingEvent(event); setEventDialog(true) }} onDeleteEvent={deleteEvent} onDismiss={dismissFestival} onExportIcs={exportIcs} />}
         {view === 'items' && <ItemsView data={data} canTake={Boolean(ai?.configured)} onTake={(item) => void takeItem(item)} takingId={takingId} onCheckIn={requestCheckIn} onNew={openNew} onEdit={(item) => { setDraft(null); setEditingItem(item); setItemDialog(true) }} onTogglePause={togglePause} onDelete={deleteItem} {...judgeProps} />}
@@ -410,7 +451,7 @@ export default function App() {
         {view === 'settings' && <SettingsView horizon={horizonSettings(data.settings)} onHorizon={setHorizonSettings} notificationState={notificationState} capacity={data.settings.capacityMinutesPerDay} ai={ai} onCapacity={setCapacity} onToggleNotifications={toggleNotifications} onExport={exportData} onImport={handleImport} onInstall={installApp} onReset={resetData} />}
       </main>
 
-      <nav className="mobile-nav" aria-label="移动端主导航">{navItems.map((entry) => <button key={entry.id} className={view === entry.id ? 'active' : ''} onClick={() => setView(entry.id)}><entry.icon size={20} /><span>{entry.label}</span>{entry.id === 'today' && dueCount > 0 && <b>{dueCount}</b>}</button>)}</nav>
+      <nav className="mobile-nav" aria-label="移动端主导航">{navItems.map((entry) => <button key={entry.id} className={view === entry.id || (view === 'today' && entry.id === 'chat') ? 'active' : ''} onClick={() => setView(entry.id)}><entry.icon size={20} /><span>{entry.label}</span>{entry.id === 'chat' && dueCount > 0 && <b>{dueCount}</b>}</button>)}</nav>
 
       <PlannerDialog open={plannerOpen} onOpenChange={setPlannerOpen} data={data} ai={ai} onCreate={createFromPlan} onManual={openManual} />
       <ItemDialog open={itemDialog} onOpenChange={setItemDialog} item={editingItem} draft={draft} onSave={saveItem} />

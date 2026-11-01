@@ -103,7 +103,7 @@ export function TodayView({ data, brief, feed, onPlan, restItems, ai, arranging,
   )
 }
 
-function NowCard({ pick, item, source, onDone, onSwap, onNotToday }: { pick: TodayPick; item: Item; source: TodayBrief['source']; onDone: (item: Item) => void; onSwap: (id: string) => void; onNotToday: (item: Item) => void }) {
+export function NowCard({ pick, item, source, onDone, onSwap, onNotToday }: { pick: TodayPick; item: Item; source: TodayBrief['source']; onDone: (item: Item) => void; onSwap: (id: string) => void; onNotToday: (item: Item) => void }) {
   return (
     <article className="now-card" aria-label="现在做这件">
       <div className="now-meta">

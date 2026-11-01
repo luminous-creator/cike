@@ -9,6 +9,7 @@ import { log } from "./lib/logger";
 import { handleClientLog } from "./lib/clientlog";
 import { analyzeRoutes } from "./routes/analyze";
 import { harnessRoutes } from "./routes/harness";
+import { chatRoutes } from "./routes/chat";
 import { REQUEST_ID_HEADER, runWithRequestId } from "./lib/requestcontext";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
@@ -86,6 +87,9 @@ app.post("/api/plan", bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.body(n
 app.post("/api/review", bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.body(null, 413) }));
 app.post("/api/today", bodyLimit({ maxSize: 1024 * 1024, onError: (c) => c.body(null, 413) }));
 app.route("/api", harnessRoutes);
+// 聊天：两段 JSON（设定 + 数据）进，回复 + 提议出
+app.post("/api/chat", bodyLimit({ maxSize: 512 * 1024, onError: (c) => c.body(null, 413) }));
+app.route("/api/chat", chatRoutes);
 app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
 
 // Unhandled request errors must reach /tmp/kimi-logs/app.log, not just stdout:

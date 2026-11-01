@@ -5,6 +5,7 @@ import { PLAYBOOKS, REFS, ARCHETYPES } from '@contracts/playbooks'
 import type { AiStatus } from '@/lib/harness'
 import { ItemRow } from '@/components/ItemRow'
 import { ModelSettings } from '@/components/ModelSettings'
+import { PromptSettings } from '@/components/PromptSettings'
 import { localDate, recommendedItems } from '@/lib/scheduler'
 import type { AppData, Item } from '@/types'
 
@@ -117,6 +118,7 @@ export function SettingsView({ horizon, onHorizon, notificationState, capacity, 
         <label className="capacity-field"><input type="number" min={15} max={960} step={15} value={capacity} onChange={(e) => onCapacity(Number(e.target.value))} aria-label="每天可支配分钟" /><span>分钟 / 天</span></label>
       </section>
       <ModelSettings ai={ai} />
+      <PromptSettings />
       <section className="settings-section vertical">
         <div className="settings-copy"><CalendarRange size={21} /><div><h2>提前规划</h2><p>每周哪天规划下一周；每天几点提醒“今天可以规划什么”；晚上几点提醒规划明天。</p></div></div>
         <div className="horizon-settings">
