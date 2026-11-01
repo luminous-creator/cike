@@ -67,6 +67,10 @@ cat <<DONE
   · 数据和快照在：$DATA
   · 同一 Wi-Fi 的电脑打开  http://${IP:-手机IP}:$PORT  ，口令：$TOKEN
   · 模型密钥：编辑 $DIR/.env 里的 DEEPSEEK_API_KEY（不用重启）
-  · 想开机自动运行：装 Termux:Boot（F-Droid）并打开一次；
-    再到系统设置里把 Termux 的电池优化关掉，后台才不会被杀。
+  · 想开机自动运行：装 Termux:Boot（F-Droid）并打开一次。
+  · 三星手机还要做四件事，否则后台会被杀：
+    1. 设置 → 应用 → Termux → 电池 → 不受限制
+    2. 设置 → 电池 → 后台使用限制 → 永不休眠的应用 → 加入 Termux、Termux:Boot
+    3. 设置 → 开发者选项 → 打开「停用子进程限制」
+    4. 最近任务里长按 Termux → 锁定此应用
 DONE
