@@ -52,11 +52,14 @@ if ! grep -q '^SYNC_TOKEN=.\+' .env; then
   echo "SYNC_TOKEN=$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> .env
 fi
 
-cat > "$DIR/cike-start.sh" <<START
+# 先写到临时文件再改名：正在运行的旧脚本读的是旧文件，不会被改到一半
+cat > "$DIR/cike-start.sh.new" <<START
 #!/data/data/com.termux/files/usr/bin/bash
 # 保持唤醒；服务端意外退出 5 秒后自动重启；只跑一份
 PIDFILE="$DATA/cike-start.pid"
-if [ -f "\$PIDFILE" ] && kill -0 "\$(cat "\$PIDFILE")" 2>/dev/null; then exit 0; fi
+OLD="\$(cat "\$PIDFILE" 2>/dev/null)"
+# 确认那个进程真的是这个脚本（重启后 pid 可能被别的程序占用）
+if [ -n "\$OLD" ] && grep -q cike-start "/proc/\$OLD/cmdline" 2>/dev/null; then exit 0; fi
 echo \$\$ > "\$PIDFILE"
 termux-wake-lock 2>/dev/null || true
 cd "$DIR"
@@ -65,14 +68,24 @@ while true; do
   sleep 5
 done
 START
-chmod +x "$DIR/cike-start.sh"
+chmod +x "$DIR/cike-start.sh.new"
+mv -f "$DIR/cike-start.sh.new" "$DIR/cike-start.sh"
 mkdir -p "$HOME/.termux/boot"
-cp "$DIR/cike-start.sh" "$HOME/.termux/boot/cike"
+# 开机时由 Termux:Boot 运行；exec 过去，进程名仍是 cike-start.sh，便于判断是否已在运行
+printf '#!/data/data/com.termux/files/usr/bin/bash\nexec "%s/cike-start.sh"\n' "$DIR" > "$HOME/.termux/boot/cike"
+chmod +x "$HOME/.termux/boot/cike"
 
-# 更新时先停掉旧的，再启动新的
-if [ -f "$DATA/cike-start.pid" ]; then kill "$(cat "$DATA/cike-start.pid")" 2>/dev/null || true; fi
+# 更新时先停掉旧的，确认真的退出了再启动新的
+OLD="$(cat "$DATA/cike-start.pid" 2>/dev/null || true)"
+[ -n "$OLD" ] && kill "$OLD" 2>/dev/null || true
 pkill -f "node dist/boot.js" 2>/dev/null || true
-sleep 1
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  { [ -z "$OLD" ] || ! kill -0 "$OLD" 2>/dev/null; } && ! pgrep -f "node dist/boot.js" >/dev/null && break
+  sleep 0.5
+done
+[ -n "$OLD" ] && kill -9 "$OLD" 2>/dev/null || true
+pkill -9 -f "node dist/boot.js" 2>/dev/null || true
+rm -f "$DATA/cike-start.pid"
 nohup "$DIR/cike-start.sh" >/dev/null 2>&1 &
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   curl -fsS -m 2 "http://localhost:$PORT/api/sync/status" >/dev/null 2>&1 && break
