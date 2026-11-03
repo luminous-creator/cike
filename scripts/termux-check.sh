@@ -16,7 +16,9 @@ val "CPU 架构" "$(uname -m)"
 echo "== Termux"
 val "版本" "${TERMUX_VERSION:-未知}"
 val "安装来源" "${TERMUX_APK_RELEASE:-未知}"
-[ "${TERMUX_APK_RELEASE:-}" = "GOOGLE_PLAY_STORE" ] && no "Play 商店版本有限制，建议换 F-Droid 或 GitHub 版"
+case "${TERMUX_APK_RELEASE:-}${TERMUX_VERSION:-}" in
+  *GOOGLE_PLAY*|*googleplay*) no "这是 Google Play 版：Termux:Boot / Termux:API 必须和它同一来源才能用，开机自启装不上；建议卸载后从 F-Droid 装 Termux、Termux:Boot、Termux:API" ;;
+esac
 
 echo "== 工具"
 for c in node npm git curl; do

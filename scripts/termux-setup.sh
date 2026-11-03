@@ -9,6 +9,13 @@ BRANCH="${CIKE_BRANCH:-main}"
 PORT="${CIKE_PORT:-3000}"
 DIR="$HOME/cike"
 
+case "${TERMUX_APK_RELEASE:-}${TERMUX_VERSION:-}" in
+  *GOOGLE_PLAY*|*googleplay*)
+    echo "!! 这是 Google Play 版 Termux：服务端能装，但开机自启（Termux:Boot）用不了。"
+    echo "!! 想要 24 小时稳定运行，建议卸载后从 F-Droid 装 Termux + Termux:Boot + Termux:API 再运行本脚本。"
+    echo "!! 10 秒后继续安装，Ctrl+C 取消。"; sleep 10 ;;
+esac
+
 echo "== 1/5 安装 Node.js 和 git"
 pkg update -y >/dev/null
 pkg install -y nodejs-lts git termux-api >/dev/null
