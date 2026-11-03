@@ -17,8 +17,10 @@ case "${TERMUX_APK_RELEASE:-}${TERMUX_VERSION:-}" in
 esac
 
 echo "== 1/5 安装 Node.js 和 git"
-pkg update -y >/dev/null
-pkg install -y nodejs-lts git termux-api >/dev/null
+# 不交互：配置文件冲突时用新版，避免卡在提问上
+export DEBIAN_FRONTEND=noninteractive
+pkg upgrade -y -o Dpkg::Options::=--force-confnew >/dev/null
+pkg install -y -o Dpkg::Options::=--force-confnew nodejs-lts git termux-api procps >/dev/null
 
 echo "== 2/5 申请存储权限（备份放到手机的 Documents 里，卸载 Termux 也不会丢）"
 [ -d "$HOME/storage/shared" ] || termux-setup-storage || true
@@ -26,7 +28,10 @@ sleep 2
 
 echo "== 3/5 下载代码（$BRANCH）"
 if [ -d "$DIR/.git" ]; then
-  git -C "$DIR" fetch --depth 1 origin "$BRANCH" && git -C "$DIR" checkout -q -B "$BRANCH" FETCH_HEAD
+  # 这个目录由脚本管理：直接对齐到远端（.env、数据、构建产物不受影响）
+  git -C "$DIR" fetch -q --depth 1 origin "$BRANCH"
+  git -C "$DIR" checkout -q -B "$BRANCH" FETCH_HEAD --force
+  git -C "$DIR" reset -q --hard FETCH_HEAD
 else
   git clone -q --depth 1 -b "$BRANCH" "$REPO" "$DIR"
 fi
@@ -49,10 +54,12 @@ fi
 
 cat > "$DIR/cike-start.sh" <<START
 #!/data/data/com.termux/files/usr/bin/bash
-# 保持唤醒；服务端意外退出 5 秒后自动重启
+# 保持唤醒；服务端意外退出 5 秒后自动重启；只跑一份
+PIDFILE="$DATA/cike-start.pid"
+if [ -f "\$PIDFILE" ] && kill -0 "\$(cat "\$PIDFILE")" 2>/dev/null; then exit 0; fi
+echo \$\$ > "\$PIDFILE"
 termux-wake-lock 2>/dev/null || true
 cd "$DIR"
-pgrep -f "node dist/boot.js" >/dev/null && exit 0
 while true; do
   node dist/boot.js >> "$DATA/server.log" 2>&1
   sleep 5
@@ -62,9 +69,19 @@ chmod +x "$DIR/cike-start.sh"
 mkdir -p "$HOME/.termux/boot"
 cp "$DIR/cike-start.sh" "$HOME/.termux/boot/cike"
 
+# 更新时先停掉旧的，再启动新的
+if [ -f "$DATA/cike-start.pid" ]; then kill "$(cat "$DATA/cike-start.pid")" 2>/dev/null || true; fi
+pkill -f "node dist/boot.js" 2>/dev/null || true
+sleep 1
 nohup "$DIR/cike-start.sh" >/dev/null 2>&1 &
-sleep 3
-IP="$(ip -4 addr show wlan0 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -1)"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  curl -fsS -m 2 "http://localhost:$PORT/api/sync/status" >/dev/null 2>&1 && break
+  sleep 1
+done
+if curl -fsS -m 2 "http://localhost:$PORT/api/sync/status" >/dev/null 2>&1; then echo "服务端已启动。"; else echo "!! 服务端没起来，看日志：$DATA/server.log"; fi
+# 安卓不让普通应用读网卡，优先用 Termux:API 拿 Wi-Fi 地址
+IP="$(timeout 5 termux-wifi-connectioninfo 2>/dev/null | grep -o '"ip": "[0-9.]*"' | grep -o '[0-9.]*[0-9]' | head -1)"
+[ -n "$IP" ] && [ "$IP" != "0.0.0.0" ] || IP="$(ifconfig 2>/dev/null | awk '/wlan0/{f=1} f&&/inet /{print $2; exit}')"
 TOKEN="$(grep '^SYNC_TOKEN=' .env | cut -d= -f2)"
 cat <<DONE
 

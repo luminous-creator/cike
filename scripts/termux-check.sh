@@ -38,7 +38,9 @@ val "Termux 可用空间" "$(df -h "$HOME" 2>/dev/null | awk 'NR==2{print $4}')"
 val "内存" "$(free -h 2>/dev/null | awk '/Mem:/{print $2" 总 / "$7" 可用"}')"
 
 echo "== 网络"
-val "Wi-Fi IP" "$(ip -4 addr show wlan0 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -1)"
+IP="$(timeout 5 termux-wifi-connectioninfo 2>/dev/null | grep -o '"ip": "[0-9.]*"' | grep -o '[0-9.]*[0-9]' | head -1)"
+[ -n "$IP" ] && [ "$IP" != "0.0.0.0" ] || IP="$(ifconfig 2>/dev/null | awk '/wlan0/{f=1} f&&/inet /{print $2; exit}')"
+val "Wi-Fi IP" "${IP:-（没连 Wi-Fi，或拿不到）}"
 curl -fsS -m 8 -o /dev/null https://registry.npmjs.org/ && ok "能连 npm" || no "连不上 npm（安装依赖会失败）"
 curl -fsS -m 8 -o /dev/null https://github.com/ && ok "能连 GitHub" || no "连不上 GitHub"
 
