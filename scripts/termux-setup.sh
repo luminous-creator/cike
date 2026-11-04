@@ -61,6 +61,12 @@ if ! grep -q '^CIKE_DATA_DIR=.\+' .env; then sed -i '/^CIKE_DATA_DIR=/d' .env; e
 if [ -z "$PORT" ]; then PORT="$(grep '^PORT=' .env | cut -d= -f2)"; fi
 PORT="${PORT:-3000}"
 case "$PORT" in ''|*[!0-9]*) echo "!! 端口必须是数字：$PORT"; exit 1 ;; esac
+# 端口被别的程序占着就提前说（我们自己的旧服务不算，下面会停掉）；先查再写配置
+if curl -s -m 2 -o /dev/null "http://localhost:$PORT/" 2>/dev/null && ! curl -fsS -m 2 "http://localhost:$PORT/api/sync/status" >/dev/null 2>&1; then
+  echo "!! 端口 $PORT 被别的程序占用了。换一个再运行：在命令前加 CIKE_PORT=3100"
+  exit 1
+fi
+
 sed -i '/^PORT=/d' .env && echo "PORT=$PORT" >> .env
 if ! grep -q '^SYNC_TOKEN=.\+' .env; then
   sed -i '/^SYNC_TOKEN=/d' .env
@@ -89,12 +95,6 @@ mkdir -p "$HOME/.termux/boot"
 # 开机时由 Termux:Boot 运行；exec 过去，进程名仍是 cike-start.sh，便于判断是否已在运行
 printf '#!/data/data/com.termux/files/usr/bin/bash\nexec "%s/cike-start.sh"\n' "$DIR" > "$HOME/.termux/boot/cike"
 chmod +x "$HOME/.termux/boot/cike"
-
-# 端口被别的程序占着就提前说（我们自己的旧服务不算，下面会停掉）
-if curl -s -m 2 -o /dev/null "http://localhost:$PORT/" 2>/dev/null && ! curl -fsS -m 2 "http://localhost:$PORT/api/sync/status" >/dev/null 2>&1; then
-  echo "!! 端口 $PORT 被别的程序占用了。换一个再运行：在命令前加 CIKE_PORT=3100"
-  exit 1
-fi
 
 # 更新时先停掉旧的，确认真的退出了再启动新的
 OLD="$(cat "$DATA/cike-start.pid" 2>/dev/null || true)"
