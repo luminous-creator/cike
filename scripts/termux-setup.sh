@@ -1,12 +1,23 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # 把安卓手机变成「此刻」的服务端：在 Termux 里运行一次即可。
 #   curl -fsSL https://raw.githubusercontent.com/luminous-creator/cike/main/scripts/termux-setup.sh | bash
-# 可用环境变量：CIKE_BRANCH（默认 main）、CIKE_REPO、CIKE_PORT（默认 3000）
+# 可用环境变量：
+#   CIKE_BRANCH  分支（默认 main）       CIKE_REPO  仓库地址
+#   CIKE_PORT    服务端端口（默认 3000；再次运行时指定就改过去）
+#   CIKE_PROXY   下载走的代理，如 http://127.0.0.1:7890（访问本机不走代理）
 set -euo pipefail
 
 REPO="${CIKE_REPO:-https://github.com/luminous-creator/cike.git}"
 BRANCH="${CIKE_BRANCH:-main}"
-PORT="${CIKE_PORT:-3000}"
+PORT="${CIKE_PORT:-}"
+
+# 代理：pkg、git、npm、curl 都认这几个变量；本机地址一律直连，否则服务端自检会被代理拦住
+if [ -n "${CIKE_PROXY:-}" ]; then
+  export http_proxy="$CIKE_PROXY" https_proxy="$CIKE_PROXY" HTTP_PROXY="$CIKE_PROXY" HTTPS_PROXY="$CIKE_PROXY"
+  echo "== 下载走代理 $CIKE_PROXY"
+fi
+export no_proxy="localhost,127.0.0.1,::1${no_proxy:+,$no_proxy}"
+export NO_PROXY="$no_proxy"
 DIR="$HOME/cike"
 
 case "${TERMUX_APK_RELEASE:-}${TERMUX_VERSION:-}" in
@@ -46,7 +57,11 @@ if [ -d "$HOME/storage/shared/Documents" ]; then DATA="$HOME/storage/shared/Docu
 mkdir -p "$DATA"
 [ -f .env ] || cp .env.example .env
 if ! grep -q '^CIKE_DATA_DIR=.\+' .env; then sed -i '/^CIKE_DATA_DIR=/d' .env; echo "CIKE_DATA_DIR=$DATA" >> .env; fi
-grep -q '^PORT=' .env || echo "PORT=$PORT" >> .env
+# 端口：这次指定了就用这次的；没指定沿用 .env 里的；都没有用 3000
+if [ -z "$PORT" ]; then PORT="$(grep '^PORT=' .env | cut -d= -f2)"; fi
+PORT="${PORT:-3000}"
+case "$PORT" in ''|*[!0-9]*) echo "!! 端口必须是数字：$PORT"; exit 1 ;; esac
+sed -i '/^PORT=/d' .env && echo "PORT=$PORT" >> .env
 if ! grep -q '^SYNC_TOKEN=.\+' .env; then
   sed -i '/^SYNC_TOKEN=/d' .env
   echo "SYNC_TOKEN=$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')" >> .env
@@ -74,6 +89,12 @@ mkdir -p "$HOME/.termux/boot"
 # 开机时由 Termux:Boot 运行；exec 过去，进程名仍是 cike-start.sh，便于判断是否已在运行
 printf '#!/data/data/com.termux/files/usr/bin/bash\nexec "%s/cike-start.sh"\n' "$DIR" > "$HOME/.termux/boot/cike"
 chmod +x "$HOME/.termux/boot/cike"
+
+# 端口被别的程序占着就提前说（我们自己的旧服务不算，下面会停掉）
+if curl -s -m 2 -o /dev/null "http://localhost:$PORT/" 2>/dev/null && ! curl -fsS -m 2 "http://localhost:$PORT/api/sync/status" >/dev/null 2>&1; then
+  echo "!! 端口 $PORT 被别的程序占用了。换一个再运行：在命令前加 CIKE_PORT=3100"
+  exit 1
+fi
 
 # 更新时先停掉旧的，确认真的退出了再启动新的
 OLD="$(cat "$DATA/cike-start.pid" 2>/dev/null || true)"

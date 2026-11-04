@@ -44,6 +44,9 @@ val "Wi-Fi IP" "${IP:-（没连 Wi-Fi，或拿不到）}"
 curl -fsS -m 8 -o /dev/null https://registry.npmjs.org/ && ok "能连 npm" || no "连不上 npm（安装依赖会失败）"
 curl -fsS -m 8 -o /dev/null https://github.com/ && ok "能连 GitHub" || no "连不上 GitHub"
 
+P="${https_proxy:-${HTTPS_PROXY:-${http_proxy:-${HTTP_PROXY:-}}}}"
+val "代理变量" "${P:-（没设；开着 VPN 全局模式时不需要）}"
+
 echo "== 此刻服务端"
 if [ -d "$HOME/cike/.git" ]; then
   ok "代码在 ~/cike（$(git -C "$HOME/cike" rev-parse --abbrev-ref HEAD 2>/dev/null) @ $(git -C "$HOME/cike" log -1 --format=%h 2>/dev/null)）"
@@ -53,7 +56,9 @@ else
   no "还没装（~/cike 不存在）"
 fi
 pgrep -f "node dist/boot.js" >/dev/null && ok "服务端正在运行" || no "服务端没在运行"
-status="$(curl -fsS -m 3 http://localhost:3000/api/sync/status 2>/dev/null)"
+PORT="$(grep '^PORT=' "$HOME/cike/.env" 2>/dev/null | cut -d= -f2)"; PORT="${PORT:-3000}"
+val "端口" "$PORT"
+status="$(NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 curl -fsS -m 3 "http://localhost:$PORT/api/sync/status" 2>/dev/null)"
 [ -n "$status" ] && val "同步状态" "$status"
 
 echo "== 后台保活（三星需要手动设置，脚本读不到，请对照检查）"
