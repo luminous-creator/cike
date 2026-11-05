@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { ArrowRightLeft, Bell, CalendarPlus, Check, ChevronDown, LoaderCircle, MoonStar, Plus, Sparkles } from 'lucide-react'
 import type { TodayBrief, TodayPick } from '@contracts/today'
 import { ItemRow } from '@/components/ItemRow'
+import { HorizonNotes, PlanBlock } from '@/components/HorizonView'
+import type { HorizonFeed, PlanTask } from '@contracts/horizon'
 import type { AiStatus } from '@/lib/harness'
 import type { JudgeProps } from '@/components/Views'
 import type { AppData, Item } from '@/types'
@@ -9,6 +11,8 @@ import type { AppData, Item } from '@/types'
 interface Props extends JudgeProps {
   data: AppData
   brief: TodayBrief
+  feed: HorizonFeed
+  onPlan: (task: PlanTask) => void
   restItems: Item[]
   ai: AiStatus | null
   arranging: boolean
@@ -23,7 +27,7 @@ interface Props extends JudgeProps {
   onNew: () => void
 }
 
-export function TodayView({ data, brief, restItems, ai, arranging, skippedCount, onArrange, onDone, onCheckIn, onSwap, onNotToday, onPull, onResetSkip, onNew, ...judge }: Props) {
+export function TodayView({ data, brief, feed, onPlan, restItems, ai, arranging, skippedCount, onArrange, onDone, onCheckIn, onSwap, onNotToday, onPull, onResetSkip, onNew, ...judge }: Props) {
   const [showRest, setShowRest] = useState(false)
   const byId = new Map(data.items.map((item) => [item.id, item]))
   const nowItem = brief.now ? byId.get(brief.now.itemId) : undefined
@@ -44,6 +48,9 @@ export function TodayView({ data, brief, restItems, ai, arranging, skippedCount,
           {brief.source === 'model' && brief.message && <p>{brief.message}</p>}
         </div>}
       </header>
+
+      <HorizonNotes feed={feed} />
+      <PlanBlock feed={feed} onPlan={onPlan} hideWhenEmpty />
 
       {nowItem && brief.now && <NowCard pick={brief.now} item={nowItem} source={brief.source} onDone={onDone} onSwap={onSwap} onNotToday={onNotToday} />}
 
@@ -96,7 +103,7 @@ export function TodayView({ data, brief, restItems, ai, arranging, skippedCount,
   )
 }
 
-function NowCard({ pick, item, source, onDone, onSwap, onNotToday }: { pick: TodayPick; item: Item; source: TodayBrief['source']; onDone: (item: Item) => void; onSwap: (id: string) => void; onNotToday: (item: Item) => void }) {
+export function NowCard({ pick, item, source, onDone, onSwap, onNotToday }: { pick: TodayPick; item: Item; source: TodayBrief['source']; onDone: (item: Item) => void; onSwap: (id: string) => void; onNotToday: (item: Item) => void }) {
   return (
     <article className="now-card" aria-label="现在做这件">
       <div className="now-meta">
